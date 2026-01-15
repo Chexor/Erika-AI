@@ -15,6 +15,12 @@ class SettingsManager:
         self.user_config = self._load_file(USER_CONF_PATH)
         self.sys_config = self._load_file(SYS_CONF_PATH)
 
+        # Migration: Ensure model_paths exists
+        if "model_paths" not in self.sys_config:
+             default_path = os.path.join(os.path.expanduser("~"), ".ollama", "models")
+             self.sys_config["model_paths"] = [default_path] if os.path.exists(default_path) else []
+             self._save_file(SYS_CONF_PATH, self.sys_config)
+
     def _ensure_defaults(self):
         if not os.path.exists(USER_CONF_PATH):
             default_user = {
@@ -25,10 +31,17 @@ class SettingsManager:
             self._save_file(USER_CONF_PATH, default_user)
             
         if not os.path.exists(SYS_CONF_PATH):
+            # Detect default Ollama path
+            default_path = os.path.join(os.path.expanduser("~"), ".ollama", "models")
+            model_paths = []
+            if os.path.exists(default_path):
+                 model_paths.append(default_path)
+
             default_sys = {
                 "ollama_url": "http://localhost:11434",
                 "model": "llama3",
-                "context_window": 8192
+                "context_window": 8192,
+                "model_paths": model_paths
             }
             self._save_file(SYS_CONF_PATH, default_sys)
 

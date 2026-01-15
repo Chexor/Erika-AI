@@ -3,6 +3,7 @@ from core.brain import Brain
 from core.memory import MemoryManager
 from core.settings import SettingsManager
 from core.logger import setup_logger
+from interface.settings_ui import SettingsModal
 import asyncio
 from datetime import datetime, timedelta
 
@@ -53,37 +54,16 @@ def main_page():
     ui.query('body').style('background-color: #212121;')
     ui.query('body').classes('text-gray-100 font-sans antialiased')
 
-    # --- SETTINGS DIALOG ---
-    with ui.dialog() as user_settings_dialog, ui.card().classes('bg-gray-800 text-white p-6 w-[500px]'):
-        ui.label('User Settings').classes('text-xl font-bold mb-4')
-        
-        name_input = ui.input('Your Name', value=u_name).classes('w-full mb-4').props('dark')
-        persona_input = ui.textarea('System Persona / Instructions', value=u_persona).classes('w-full mb-4').props('dark rows=3')
-        
-        # Dark Mode Toggle
-        def toggle_theme():
-            if dark_mode.value: # Currently Dark
-                 dark_mode.disable()
-                 settings_manager.set_user_setting("theme", "light")
-            else:
-                 dark_mode.enable()
-                 settings_manager.set_user_setting("theme", "dark")
-                 
-        ui.switch('Dark Mode', value=True if u_theme == 'dark' else False, on_change=toggle_theme).classes('mb-6')
-
-        with ui.row().classes('w-full justify-end'):
-            def save_user_settings():
-                new_name = name_input.value
-                new_persona = persona_input.value
-                
-                settings_manager.set_user_setting("username", new_name)
-                settings_manager.set_user_setting("persona", new_persona)
-                
-                user_name_label.set_text(new_name)
-                user_settings_dialog.close()
-                ui.notify('Settings Saved', type='positive')
-                
-            ui.button('Save', on_click=save_user_settings).props('flat color=white')
+    # --- SETTINGS MODAL ---
+    def toggle_theme():
+        if dark_mode.value: # Currently Dark
+            dark_mode.disable()
+            settings_manager.set_user_setting("theme", "light")
+        else:
+            dark_mode.enable()
+            settings_manager.set_user_setting("theme", "dark")
+            
+    settings_modal = SettingsModal(settings_manager, on_theme_toggle=toggle_theme)
 
     # --- UI Layout Containers ---
     # We define placeholders for dynamic content
@@ -99,7 +79,7 @@ def main_page():
         history_column = ui.column().classes('flex-grow overflow-y-auto gap-2')
         
         # User Profile (Bottom)
-        with ui.row().classes('w-full items-center gap-3 pt-4 border-t border-gray-800 cursor-pointer hover:bg-gray-800 p-2 rounded transition-colors').on('click', user_settings_dialog.open):
+        with ui.row().classes('w-full items-center gap-3 pt-4 border-t border-gray-800 cursor-pointer hover:bg-gray-800 p-2 rounded transition-colors').on('click', settings_modal.open):
             ui.avatar(icon='person', color='gray-700', text_color='white').props('size=sm')
             user_name_label = ui.label(u_name).classes('text-sm font-medium text-white')
             ui.icon('settings', color='gray-500').classes('ml-auto text-xs')
