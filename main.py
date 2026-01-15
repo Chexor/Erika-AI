@@ -19,7 +19,8 @@ def create_icon(color="blue"):
     
     width = 64
     height = 64
-    image = Image.new('RGB', (width, height), color=(55, 55, 55))
+    # Use RGBA
+    image = Image.new('RGBA', (width, height), color=(255, 255, 255, 255))
     dc = ImageDraw.Draw(image)
     # Draw a rectangle/square in the middle
     dc.rectangle((width // 4, height // 4, width * 3 // 4, height * 3 // 4), fill=fill_color)
@@ -34,12 +35,15 @@ def on_exit(icon, item):
     ui.shutdown()
 
 def setup_tray(initial_status: bool):
+    print(f"DEBUG: Starting tray with status={initial_status}")
     color = "green" if initial_status else "red"
     icon = pystray.Icon("Erika", create_icon(color), menu=pystray.Menu(
         pystray.MenuItem("Open Erika", on_open),
         pystray.MenuItem("Exit", on_exit)
     ))
+    print("DEBUG: Tray icon created. Running icon loop...")
     icon.run()
+    print("DEBUG: Tray icon loop ended.")
 
 if __name__ == '__main__':
     # Initial Health Check
@@ -57,4 +61,5 @@ if __name__ == '__main__':
     
     # Run UI
     # Native mode uses pywebview
-    ui.run(native=True, title="Erika AI", reload=False)
+    # switching to False for debugging
+    ui.run(native=False, title="Erika AI", reload=False)

@@ -6,9 +6,14 @@ import asyncio
 my_brain = Brain()
 
 # Connection Check on UI Load
-app.on_connect(lambda: check_brain_status())
+async def on_connect_handler(client):
+    await check_brain_status()
+
+app.on_connect(on_connect_handler)
 
 async def check_brain_status():
+    # Use asyncio.to_thread to avoid blocking event loop with synchronous calls
+    # Note: my_brain.status_check is synchronous (requests/http)
     is_connected = await asyncio.to_thread(my_brain.status_check)
     if not is_connected:
         ui.notify('⚠️ Brain Disconnected: Is Ollama running?', type='negative', close_button=True, timeout=0)
