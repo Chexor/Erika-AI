@@ -1,27 +1,30 @@
-# Erika-AI
+# 🧠 Erika: The Local Agentic Hub
 
-**Erika: A local-first, agentic AI hub app for desktop automation. Powered by Python, Local LLMs, and the Model Context Protocol (MCP).**
+Erika is an autonomous, local-first AI assistant designed to live natively within the operating system. Unlike cloud-based chatbots, Erika functions as a persistent Central Hub (System Tray Daemon) that orchestrates local workflows, interacts with files directly, and manages agentic tools via the Model Context Protocol (MCP).
 
-## Installation
+## 🚀 Core Philosophy
+**100% Local**: Powered by local LLMs (Ollama/vLLM) to ensure total privacy.
 
-1. Create a virtual environment (optional but recommended):
-   ```bash
-   python -m venv venv
-   .\venv\Scripts\activate
-   ```
+**OS-Native**: Integrated deeply into the desktop workflow via Context Menus ("Show to Erika") and System Tray presence.
 
-2. Install dependencies:
+**Modular Architecture**: Built on a "Hub & Spoke" model—Erika acts as the router, dispatching tasks to specialized agents (Coder, Researcher, Librarian).
+
+## 🛠️ Architecture
+- **Language**: Python
+- **Interface**: NiceGUI / Streamlit (Local Web-Native UI)
+- **Protocol**: Model Context Protocol (MCP) Client
+- **LLM Backend**: Agnostic (OpenAI API Compatible / Local Endpoints)
+
+---
+
+## Installation & Usage
+
+1. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-## Usage
-
-Run the main script:
-```bash
-python main.py
-```
-
-- A system tray icon (grey box with blue center) will appear.
-- The Erika Chat UI window will open.
-- Right-click the tray icon to see options (Open, Exit).
+2. **Run the application**:
+   ```bash
+   python main.py
+   ```
