@@ -41,6 +41,15 @@ def on_open(icon, item):
     # Open the browser to the NiceGUI app
     webbrowser.open('http://localhost:8080')
 
+def on_settings(icon, item):
+    print("Settings clicked. Opening app...")
+    webbrowser.open('http://localhost:8080')
+
+def on_restart(icon, item):
+    print("Restarting...")
+    icon.stop()
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
 def on_exit(icon, item):
     icon.stop()
     ui.shutdown()
@@ -48,10 +57,17 @@ def on_exit(icon, item):
 def setup_tray(initial_status: bool):
     print(f"DEBUG: Starting tray with status={initial_status}")
     color = "green" if initial_status else "red"
-    icon = pystray.Icon("Erika", create_icon(color), menu=pystray.Menu(
-        pystray.MenuItem("Open Erika", on_open),
-        pystray.MenuItem("Exit", on_exit)
-    ))
+    
+    # Menu Definition
+    # 'default=True' makes 'Open Erika' trigger on left-click (Windows behavior varies, usually double-click)
+    menu = pystray.Menu(
+        pystray.MenuItem("Open Erika", on_open, default=True),
+        pystray.MenuItem("Settings", on_settings),
+        pystray.MenuItem("Restart", on_restart),
+        pystray.MenuItem("Quit", on_exit)
+    )
+
+    icon = pystray.Icon("Erika", create_icon(color), menu=menu)
     print("DEBUG: Tray icon created. Running icon loop...")
     icon.run()
     print("DEBUG: Tray icon loop ended.")
