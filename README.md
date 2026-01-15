@@ -61,6 +61,14 @@ This will launch the application in your default web browser (Browser Mode).
 - **Logs**: Detailed debug logs are written to `erika_home/logs/erika.log`. This file rotates automatically (max 5MB).
 - **Console**: The terminal output remains clean, showing only high-level INFO status updates.
 
+### 🎨 Core Experience Polish
+- **Model Display**: Validates which model is active via a "Chip" in the input bar (e.g., `LLAMA3`).
+- **Persona Management**: You can now define Erika's personality in **User Settings** (e.g., "You are a Python Expert").
+- **Improved Input**:
+    - **Enter to Send**: Type and hit Enter. Use Shift+Enter for new lines.
+    - **Stop Generation**: A red Stop button appears during generation, allowing instant interruption.
+- **Async Backend**: The core engine is now fully asynchronous, ensuring the UI remains responsive even during heavy thought processes.
+
 ## 📂 Directory Structure
 Erika creates a `erika_home/` directory in the project root:
 - `chats/`: Stores conversation history (JSON).

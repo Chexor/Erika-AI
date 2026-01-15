@@ -1,6 +1,7 @@
 from core.llm.engine import LocalLLMEngine
 from core.erika_vision.engine import ErikaVision
 from core.logger import setup_logger
+from core.settings import SettingsManager
 
 # CONFIG: Default to Ollama. Change model_name if needed.
 ACTIVE_URL = "http://localhost:11434/v1"
@@ -9,26 +10,34 @@ ACTIVE_MODEL = "llama3"
 class Brain:
     def __init__(self):
         self.logger = setup_logger("Brain")
+        self.settings_manager = SettingsManager()
         self.engine = LocalLLMEngine(base_url=ACTIVE_URL, model_name=ACTIVE_MODEL)
         self.vision = ErikaVision() # Initialize Vision
-        self.system_persona = (
+        # Default persona fallback, but we primarily use settings now
+        self.default_persona = (
             "You are Erika, a highly capable local AI assistant. "
             "You are helpful, concise, and run entirely on the user's hardware."
         )
         self.logger.info(f"Initialized Brain with model: {ACTIVE_MODEL}")
 
-    def think(self, user_input):
+    def _get_system_prompt(self):
+        return self.settings_manager.get_user_setting('persona', self.default_persona)
+
+    async def think(self, user_input, system_prompt=None):
+        persona = system_prompt if system_prompt else self._get_system_prompt()
         self.logger.info(f"Thinking on input: {str(user_input)[:50]}...")
         try:
-            return self.engine.generate(user_input, self.system_persona)
+            return await self.engine.generate(user_input, persona)
         except Exception as e:
             self.logger.error(f"Error in think: {e}", exc_info=True)
             return "Thinking Error."
 
-    def think_stream(self, user_input):
+    async def think_stream(self, user_input, system_prompt=None):
+        persona = system_prompt if system_prompt else self._get_system_prompt()
         self.logger.info(f"Streaming on input: {str(user_input)[:50]}...")
         try:
-            return self.engine.stream(user_input, self.system_persona)
+            async for chunk in self.engine.stream(user_input, persona):
+                yield chunk
         except Exception as e:
             self.logger.error(f"Error in think_stream: {e}", exc_info=True)
             yield "Stream Error."

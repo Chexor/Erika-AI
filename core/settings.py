@@ -17,7 +17,11 @@ class SettingsManager:
 
     def _ensure_defaults(self):
         if not os.path.exists(USER_CONF_PATH):
-            default_user = {"username": "User", "theme": "dark"}
+            default_user = {
+                "username": "User", 
+                "theme": "dark",
+                "persona": "You are Erika, a helpful and intelligent AI assistant."
+            }
             self._save_file(USER_CONF_PATH, default_user)
             
         if not os.path.exists(SYS_CONF_PATH):

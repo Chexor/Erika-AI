@@ -38,21 +38,27 @@ def main_page():
     # Load User Settings
     u_name = settings_manager.get_user_setting("username", "User")
     u_theme = settings_manager.get_user_setting("theme", "dark")
+    u_persona = settings_manager.get_user_setting("persona", "You are Erika, a helpful AI.") # Load persona
     
     if u_theme == 'dark':
         dark_mode.enable()
     else:
         dark_mode.disable()
     
+    # State for generation control
+    is_generating = False 
+    stop_generation_flag = False
+
     # Force background color for the body
     ui.query('body').style('background-color: #212121;')
     ui.query('body').classes('text-gray-100 font-sans antialiased')
 
     # --- SETTINGS DIALOG ---
-    with ui.dialog() as user_settings_dialog, ui.card().classes('bg-gray-800 text-white p-6 w-96'):
+    with ui.dialog() as user_settings_dialog, ui.card().classes('bg-gray-800 text-white p-6 w-[500px]'):
         ui.label('User Settings').classes('text-xl font-bold mb-4')
         
         name_input = ui.input('Your Name', value=u_name).classes('w-full mb-4').props('dark')
+        persona_input = ui.textarea('System Persona / Instructions', value=u_persona).classes('w-full mb-4').props('dark rows=3')
         
         # Dark Mode Toggle
         def toggle_theme():
@@ -68,7 +74,11 @@ def main_page():
         with ui.row().classes('w-full justify-end'):
             def save_user_settings():
                 new_name = name_input.value
+                new_persona = persona_input.value
+                
                 settings_manager.set_user_setting("username", new_name)
+                settings_manager.set_user_setting("persona", new_persona)
+                
                 user_name_label.set_text(new_name)
                 user_settings_dialog.close()
                 ui.notify('Settings Saved', type='positive')
@@ -114,7 +124,8 @@ def main_page():
                 with ui.row().classes('w-full justify-start mb-6 gap-4 items-start'):
                      with ui.element('div').classes('min-w-[32px] pt-1'):
                          ui.image('/assets/Erika-AI_logo_transparant.png').classes('w-8 h-8 rounded-full bg-gray-800')
-                     ui.markdown(content).classes('text-gray-100 text-base leading-relaxed max-w-full overflow-hidden prose prose-invert')
+                     # Markdown Extras enabled
+                     ui.markdown(content, extras=['fenced-code-blocks', 'tables', 'latex']).classes('text-gray-100 text-base leading-relaxed max-w-full overflow-hidden prose prose-invert')
 
     def load_new_chat():
         nonlocal current_chat_id
@@ -197,12 +208,24 @@ def main_page():
             render_section('Older', older_chats)
 
     async def send():
-        nonlocal current_chat_id
+        nonlocal current_chat_id, is_generating, stop_generation_flag
         user_msg = text_input.value
         if not user_msg:
             return
         
+        # Don't send if already generating
+        if is_generating:
+            return
+
         text_input.value = ''
+        
+        # UI State Update
+        is_generating = True
+        stop_generation_flag = False
+        
+        # Toggle buttons based on state
+        send_btn.set_visibility(False)
+        stop_btn.set_visibility(True)
         
         # Determine if New Chat
         if current_chat_id is None:
@@ -221,7 +244,7 @@ def main_page():
             with response_row:
                  with ui.element('div').classes('min-w-[32px] pt-1'):
                      ui.image('/assets/Erika-AI_logo_transparant.png').classes('w-8 h-8 rounded-full bg-gray-800')
-                 response_content = ui.markdown().classes('text-gray-100 text-base leading-relaxed max-w-full overflow-hidden prose prose-invert')
+                 response_content = ui.markdown(extras=['fenced-code-blocks', 'tables', 'latex']).classes('text-gray-100 text-base leading-relaxed max-w-full overflow-hidden prose prose-invert')
                  
         # 3. Stream
         full_response = ""
@@ -239,10 +262,12 @@ def main_page():
         
         try:
             # Pass constrained context to think_stream
-            for chunk in my_brain.think_stream(current_context):
+            async for chunk in my_brain.think_stream(current_context):
+                if stop_generation_flag:
+                    break
                 full_response += chunk
                 response_content.set_content(full_response)
-                await asyncio.sleep(0)
+                # await asyncio.sleep(0) # Not needed with async iterator, but harmless
             
             # 4. Save to Memory
             memory_manager.save_turn(current_chat_id, user_msg, full_response)
@@ -252,12 +277,24 @@ def main_page():
             
         except Exception as e:
             ui.notify(f"Error: {e}", type='negative')
+        finally:
+            # Reset UI State
+            is_generating = False
+            stop_generation_flag = False
+            stop_btn.set_visibility(False)
+            send_btn.set_visibility(True)
 
+    def stop_generation():
+        nonlocal stop_generation_flag
+        stop_generation_flag = True
+        ui.notify("Stopping generation...")
     
     # --- Floating Input Bar ---
     with ui.page_sticky(position='bottom', x_offset=0, y_offset=40).classes('w-full flex justify-center px-4'):
         with ui.row().classes('w-full max-w-3xl bg-gray-700/90 backdrop-blur-sm rounded-full p-2 pl-4 items-center shadow-2xl border border-gray-600'):
-            ui.button(icon='add_circle').props('flat round color=gray-400').classes('hover:text-white transition-colors')
+            # Model Chip (Read Only)
+            model_name = my_brain.get_model_name()
+            ui.chip(model_name, icon='psychology').props('outline color=grey-4').classes('text-xs font-bold mr-2 uppercase select-none opacity-80')
             
             text_input = ui.textarea(placeholder='Send a message') \
                 .props('autogrow rows=1 borderless input-class="text-white placeholder-gray-400"') \
@@ -265,8 +302,14 @@ def main_page():
                 .on('keydown.enter.prevent', lambda: asyncio.create_task(send())) 
             
             with ui.row().classes('items-center gap-2 pr-1'):
-                ui.label(my_brain.get_model_name()).classes('text-xs font-bold text-gray-400 border border-gray-500 rounded px-2 py-0.5 uppercase select-none')
-                ui.button(on_click=lambda: asyncio.create_task(send())) \
+                # Stop Button (Hidden by default)
+                stop_btn = ui.button(icon='stop_circle', on_click=stop_generation) \
+                    .props('flat round color=red') \
+                    .classes('hover:bg-gray-800 transition-colors') 
+                stop_btn.set_visibility(False)
+
+                # Send Button
+                send_btn = ui.button(on_click=lambda: asyncio.create_task(send())) \
                     .props('round icon=arrow_upward color=white text-color=black') \
                     .classes('shadow-lg hover:bg-gray-200 transition-colors')
 
