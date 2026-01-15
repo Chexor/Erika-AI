@@ -15,11 +15,17 @@ class SettingsManager:
         self.user_config = self._load_file(USER_CONF_PATH)
         self.sys_config = self._load_file(SYS_CONF_PATH)
 
-        # Migration: Ensure model_paths exists
+        # Migration: Ensure model_paths exists and includes the standard Ollama directory
+        default_path = os.path.join(os.path.expanduser("~"), ".ollama", "models")
+        # Create the directory if it doesn't exist
+        os.makedirs(default_path, exist_ok=True)
         if "model_paths" not in self.sys_config:
-             default_path = os.path.join(os.path.expanduser("~"), ".ollama", "models")
-             self.sys_config["model_paths"] = [default_path] if os.path.exists(default_path) else []
-             self._save_file(SYS_CONF_PATH, self.sys_config)
+            self.sys_config["model_paths"] = [default_path]
+        else:
+            if default_path not in self.sys_config["model_paths"]:
+                # Prepend to give priority
+                self.sys_config["model_paths"].insert(0, default_path)
+        self._save_file(SYS_CONF_PATH, self.sys_config)
 
     def _ensure_defaults(self):
         if not os.path.exists(USER_CONF_PATH):

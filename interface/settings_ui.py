@@ -13,6 +13,10 @@ class SettingsModal:
         # State Management (Copies for binding)
         self.pending_user = self.settings.user_config.copy()
         self.pending_sys = self.settings.sys_config.copy()
+        # Cache for Ollama model list
+        self._cached_models = None
+        # Pre‑fetch model list in background so the System tab is instant
+        asyncio.create_task(self._prefetch_models())
         
         self.dialog = ui.dialog()
         with self.dialog, ui.card().classes('w-full max-w-[850px] h-[700px] max-h-[90vh] p-0 flex flex-col bg-[#212121] border border-white/10 no-wrap'):
@@ -95,36 +99,81 @@ class SettingsModal:
                 self.render_about_tab()
 
     def _fetch_ollama_models(self):
+        """Return cached Ollama model list if available, otherwise fetch and cache it."""
+        if self._cached_models is not None:
+            return self._cached_models
         url = self.settings.get_system_setting('ollama_url', 'http://localhost:11434')
         try:
             resp = requests.get(f"{url}/api/tags", timeout=2)
             if resp.status_code == 200:
                 data = resp.json()
-                return [m['name'] for m in data.get('models', [])]
+                models = [m['name'] for m in data.get('models', [])]
+                self._cached_models = models
+                return models
         except Exception:
             return []
         return []
 
-    async def _browse_directory(self, path_input):
+    async def _prefetch_models(self):
+        """Background task to pre‑fetch the model list on startup."""
+        # Trigger a fetch; result will be cached inside _fetch_ollama_models
+        self._fetch_ollama_models()
+
+
+    def refresh_path_list(self):
+        self.path_list_container.clear()
+        paths = self.pending_sys.get('model_paths', [])
+        
+        with self.path_list_container:
+            for i, path in enumerate(paths):
+                with ui.row().classes('w-full items-center gap-2 bg-[#2f2f2f] p-2 rounded-md'):
+                    ui.label(path).classes('text-sm text-gray-300 flex-grow break-all')
+                    ui.button(icon='remove', on_click=lambda idx=i: self.remove_path(idx)) \
+                        .props('flat round color=red dense size=sm')
+            
+            # Add Button Row
+            with ui.row().classes('w-full justify-start mt-2'):
+                 ui.button('Add Folder', icon='create_new_folder', on_click=self.add_path_click) \
+                    .classes('bg-green-600 text-white text-sm px-3 py-1 rounded hover:bg-green-700') \
+                    .props('dense')
+
+    def remove_path(self, index):
+        paths = self.pending_sys.get('model_paths', [])
+        if 0 <= index < len(paths):
+            paths.pop(index)
+            self.refresh_path_list()
+
+    async def add_path_click(self):
+        await self._browse_directory()
+
+    async def _browse_directory(self):
         try:
-            # Run tkinter dialog in thread to avoid blocking main loop
-            root = tk.Tk()
-            root.withdraw() # Hide main window
-            root.attributes('-topmost', True) # Bring to front
+            # Use PowerShell to open a folder picker dialog (Windows only, safe for threads)
+            cmd = "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.ShowDialog() | Out-Null; $f.SelectedPath"
             
-            # Use asyncio to run the blocking call
-            path = await asyncio.to_thread(filedialog.askdirectory)
-            
-            root.destroy()
+            def run_powershell_dialog():
+                import subprocess
+                # CREATE_NO_WINDOW = 0x08000000 to hide console
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                
+                result = subprocess.run(
+                    ["powershell", "-Command", cmd], 
+                    capture_output=True, 
+                    text=True, 
+                    creationflags=0x08000000
+                )
+                return result.stdout.strip()
+
+            path = await asyncio.to_thread(run_powershell_dialog)
             
             if path:
                 # Add to pending settings
                 current_paths = self.pending_sys.get('model_paths', [])
                 if path not in current_paths:
                     current_paths.append(path)
-                    self.pending_sys['model_paths'] = current_paths
-                    path_input.set_value(", ".join(current_paths))
-                    ui.notify(f"Added model path (Pending Save): {path}")
+                    self.refresh_path_list()
+                    ui.notify(f"Added: {path}")
         except Exception as e:
             ui.notify(f"Error browsing: {e}", type='negative')
 
@@ -155,7 +204,7 @@ class SettingsModal:
     def render_memory_tab(self):
         ui.label('Memory Settings').classes('text-2xl font-semibold mb-6')
         ui.label('Memory management features coming soon.').classes('text-gray-400 italic')
-        
+
     def render_system_tab(self):
         ui.label('System Settings').classes('text-2xl font-semibold mb-6')
         
@@ -163,50 +212,41 @@ class SettingsModal:
         sys_model = self.pending_sys.get('model', 'llama3')
         sys_url = self.pending_sys.get('ollama_url', 'http://localhost:11434')
         sys_ctx = self.pending_sys.get('context_window', 8192)
-        sys_paths = self.pending_sys.get('model_paths', [])
 
         # Fetch Available Models
         available_models = self._fetch_ollama_models()
         if not available_models:
-             available_models = [sys_model, 'llama3', 'mistral', 'gemma'] # Fallbacks
+             available_models = [sys_model, 'llama3', 'mistral', 'gemma'] 
         
-        # Ensure current model is valid
         if sys_model not in available_models:
             available_models.append(sys_model)
 
-        # --- MODEL LOCATION ---
-        ui.label('Model Location').classes('text-sm font-bold text-gray-500 uppercase mb-2')
-        ui.label('Location where models are stored.').classes('text-xs text-gray-400 mb-2')
-        
-        with ui.row().classes('w-full items-center gap-2 mb-6'):
-            # Just display them as a comma separated string for now
-            path_str = ", ".join(sys_paths)
-            path_input = ui.input(value=path_str).classes('flex-grow').props('dark outlined readonly')
-            ui.button('Browse', icon='folder_open', on_click=lambda: asyncio.create_task(self._browse_directory(path_input))) \
-                .classes('bg-gray-700 text-white hover:bg-gray-600')
+        # 1. Ollama API URL
+        ui.label('LLM Link').classes('text-sm font-bold text-gray-500 uppercase mb-2')
+        ui.input('Ollama API URL', value=sys_url, on_change=lambda e: self.pending_sys.update({'ollama_url': e.value})) \
+            .classes('w-full mb-6').props('dark outlined')
 
-        # --- MODEL CONFIG ---
-        ui.label('LLM Configuration').classes('text-sm font-bold text-gray-500 uppercase mb-2')
+        # 2. Model Locations (Dynamic List)
+        ui.label('Model Locations').classes('text-sm font-bold text-gray-500 uppercase mb-2')
+        ui.label('Manage folders where Erika looks for GGUF models.').classes('text-xs text-gray-400 mb-2')
         
-        # Model Name (Dropdown)
+        self.path_list_container = ui.column().classes('w-full gap-2 mb-6')
+        self.refresh_path_list()
+
+        # 3. Model Selection
+        ui.label('Active Model').classes('text-sm font-bold text-gray-500 uppercase mb-2')
         ui.select(available_models, value=sys_model, label='Model Name', 
                   on_change=lambda e: self.pending_sys.update({'model': e.value})) \
-            .classes('w-full mb-4').props('dark outlined behavior=menu')
+            .classes('w-full mb-6').props('dark outlined behavior=menu')
             
-        # Ollama URL
-        ui.input('Ollama API URL', value=sys_url, on_change=lambda e: self.pending_sys.update({'ollama_url': e.value})).classes('w-full mb-4').props('dark outlined')
+        # 4. Context Window
+        ui.label('Context Length').classes('text-sm font-bold text-gray-500 uppercase mb-1')
+        ui.label('Token limit for memory and processing.').classes('text-xs text-gray-400 mb-4')
         
-        # Context Window (Slider)
-        ui.label('Context Length').classes('text-sm font-bold text-gray-500 uppercase mb-1 mt-2')
-        ui.label('Context length determines how much of your conversation local LLMs can remember.').classes('text-xs text-gray-400 mb-4')
-        
-        # Slider Scale: 4k to 128k
-        # We use a logarithmic-like mapping or just fixed steps
         ctx_options = [4096, 8192, 16384, 32768, 65536, 131072]
         ctx_labels = {4096: '4k', 8192: '8k', 16384: '16k', 32768: '32k', 65536: '64k', 131072: '128k'}
         
-        # Find closed index
-        current_idx = 1 # Default 8k
+        current_idx = 1 
         if sys_ctx in ctx_options:
             current_idx = ctx_options.index(sys_ctx)
             
@@ -215,12 +255,10 @@ class SettingsModal:
                 .classes('w-full') \
                 .props('markers snap label')
              
-             # Labels row
              with ui.row().classes('w-full justify-between text-[10px] text-gray-500 mt-1'):
                  for val in ctx_options:
                      ui.label(ctx_labels.get(val, str(val)))
 
-        # Link slider change to setting
         def on_slider_change(e):
             val = ctx_options[int(e.value)]
             self.pending_sys['context_window'] = val

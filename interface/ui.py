@@ -283,9 +283,10 @@ def main_page():
     
     # --- Floating Input Bar ---
     with ui.page_sticky(position='bottom').classes('w-full flex justify-center pb-8 px-4'):
-        with ui.row().classes('w-full max-w-5xl bg-[#2f2f2f] rounded-2xl shadow-xl border border-white/10 p-2 pl-4 items-end'):
-             # Model Chip (Read Only)
-            model_name = my_brain.get_model_name()
+        # Use same max width as chat column (4xl) but allow a bit more space
+        with ui.row().classes('w-full max-w-6xl bg-[#2f2f2f] rounded-2xl shadow-xl border border-white/10 p-2 pl-4 items-end'):
+            # Model Chip (Read Only) – show model from system settings
+            model_name = settings_manager.get_system_setting('model', my_brain.get_model_name())
             ui.chip(model_name, icon='psychology').props('outline color=grey-4').classes('text-xs font-bold mr-2 mb-2 uppercase select-none opacity-50')
             
             text_input = ui.textarea(placeholder='Send a message') \
