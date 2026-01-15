@@ -109,7 +109,7 @@ def main_page():
         # Empty State (Initial)
         empty_state = ui.column().classes('w-full h-full justify-center items-center gap-6 opacity-40 select-none')
         with empty_state:
-            ui.image('/assets/Erika-AI_logo_transparant.png').classes('w-32 opacity-80')
+            ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-32 opacity-80')
             ui.label('How can I help you today?').classes('text-2xl font-semibold text-gray-500')
 
     # --- Logic Functions ---
@@ -123,7 +123,7 @@ def main_page():
             elif role == 'assistant':
                 with ui.row().classes('w-full justify-start mb-6 gap-4 items-start'):
                      with ui.element('div').classes('min-w-[32px] pt-1'):
-                         ui.image('/assets/Erika-AI_logo_transparant.png').classes('w-8 h-8 rounded-full bg-gray-800')
+                         ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-8 h-8 rounded-full bg-gray-800')
                      # Markdown Extras enabled
                      ui.markdown(content, extras=['fenced-code-blocks', 'tables', 'latex']).classes('text-gray-100 text-base leading-relaxed max-w-full overflow-hidden prose prose-invert')
 
@@ -138,7 +138,7 @@ def main_page():
             nonlocal empty_state 
             empty_state = ui.column().classes('w-full h-full justify-center items-center gap-6 opacity-40 select-none')
             with empty_state:
-                ui.image('/assets/Erika-AI_logo_transparant.png').classes('w-32 opacity-80')
+                ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-32 opacity-80')
                 ui.label('How can I help you today?').classes('text-2xl font-semibold text-gray-500')
         
         refresh_history_ui()
@@ -243,7 +243,7 @@ def main_page():
             response_row = ui.row().classes('w-full justify-start mb-6 gap-4 items-start')
             with response_row:
                  with ui.element('div').classes('min-w-[32px] pt-1'):
-                     ui.image('/assets/Erika-AI_logo_transparant.png').classes('w-8 h-8 rounded-full bg-gray-800')
+                     ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-8 h-8 rounded-full bg-gray-800')
                  response_content = ui.markdown(extras=['fenced-code-blocks', 'tables', 'latex']).classes('text-gray-100 text-base leading-relaxed max-w-full overflow-hidden prose prose-invert')
                  
         # 3. Stream

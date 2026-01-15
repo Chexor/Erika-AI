@@ -13,7 +13,7 @@ logger = setup_logger("Main")
 
 def create_icon(color="blue"):
     # Try to load custom logo
-    logo_path = os.path.join(os.path.dirname(__file__), 'assets', 'Erika-AI_logo_transparant.png')
+    logo_path = os.path.join(os.path.dirname(__file__), 'assets', 'Erika-AI_logo2_transparant.png')
     if os.path.exists(logo_path):
         try:
             return Image.open(logo_path)
