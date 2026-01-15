@@ -19,12 +19,19 @@ Erika is an autonomous, local-first AI assistant designed to live natively withi
 
 ## Installation & Usage
 
-1. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 1. Prerequisites
+- **Python**: 3.10+
+- **Local LLM Server**: You need to have a local LLM server running (e.g., [Ollama](https://ollama.com/)).
+  - Default url: `http://localhost:11434/v1`
+  - Default model: `llama3` (run `ollama pull llama3`)
 
-2. **Run the application**:
-   ```bash
-   python main.py
-   ```
+### 2. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Run the application
+Ensure your local LLM is running (e.g., `ollama serve`), then start Erika:
+```bash
+python main.py
+```
