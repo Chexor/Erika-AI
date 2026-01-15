@@ -10,7 +10,7 @@ class LocalLLMEngine(LLMProvider):
         )
         self.model_name = model_name
 
-    def generate(self, prompt: str, system_prompt: str = None) -> str:
+    def generate(self, prompt, system_prompt: str = None) -> str:
         messages = self._build_messages(prompt, system_prompt)
         try:
             response = self.client.chat.completions.create(
@@ -24,7 +24,7 @@ class LocalLLMEngine(LLMProvider):
         except Exception as e:
             return f"⚠️ Error: {str(e)}"
 
-    def stream(self, prompt: str, system_prompt: str = None):
+    def stream(self, prompt, system_prompt: str = None):
         messages = self._build_messages(prompt, system_prompt)
         try:
             stream = self.client.chat.completions.create(
@@ -40,11 +40,22 @@ class LocalLLMEngine(LLMProvider):
         except Exception as e:
             yield f"⚠️ Error: {str(e)}"
 
-    def _build_messages(self, prompt: str, system_prompt: str):
+    def _build_messages(self, prompt_or_messages, system_prompt: str):
+        # Case 1: Input is already a list of messages
+        if isinstance(prompt_or_messages, list):
+            # If system prompt is provided, prepend it if not present
+            messages = prompt_or_messages.copy()
+            if system_prompt:
+                # Check if first message is system; if not, insert
+                if not messages or messages[0].get('role') != 'system':
+                    messages.insert(0, {"role": "system", "content": system_prompt})
+            return messages
+            
+        # Case 2: Input is a string (Legacy)
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": prompt_or_messages})
         return messages
 
     def check_connection(self) -> bool:

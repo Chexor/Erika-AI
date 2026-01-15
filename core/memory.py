@@ -61,6 +61,18 @@ class MemoryManager:
         chat_data["updated_at"] = timestamp
         self._save_file(chat_id, chat_data)
 
+    def get_messages(self, chat_id: str) -> list:
+        """Returns the message history for a chat, cleaned for the LLM."""
+        data = self.load_chat(chat_id)
+        if not data:
+            return []
+        
+        # Return only role and content
+        return [
+            {"role": msg["role"], "content": msg["content"]} 
+            for msg in data.get("messages", [])
+        ]
+
     def load_chat(self, chat_id: str) -> dict:
         """Loads a chat object by ID."""
         filepath = os.path.join(CHATS_DIR, f"{chat_id}.json")

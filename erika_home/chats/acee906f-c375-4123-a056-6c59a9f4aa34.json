@@ -1,0 +1,28 @@
+{
+  "id": "acee906f-c375-4123-a056-6c59a9f4aa34",
+  "title": "My name is Tim.",
+  "created_at": "2026-01-15T20:49:16.127287",
+  "updated_at": "2026-01-15T20:49:34.347432",
+  "messages": [
+    {
+      "role": "user",
+      "content": "My name is Tim.",
+      "timestamp": "2026-01-15T20:49:18.430560"
+    },
+    {
+      "role": "assistant",
+      "content": "Nice to meet you, Tim! I'm Erika, your friendly AI assistant at your service. How can I help you today? Do you have a specific question or task in mind? Let me know and I'll do my best to assist you!",
+      "timestamp": "2026-01-15T20:49:18.430560"
+    },
+    {
+      "role": "user",
+      "content": "What is my name?",
+      "timestamp": "2026-01-15T20:49:34.347432"
+    },
+    {
+      "role": "assistant",
+      "content": "Your name is Tim, isn't it? That's right, Tim! I remember we just introduced ourselves. Nice to chat with you, Tim!",
+      "timestamp": "2026-01-15T20:49:34.347432"
+    }
+  ]
+}

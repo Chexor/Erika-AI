@@ -14,10 +14,10 @@ class Brain:
             "You are helpful, concise, and run entirely on the user's hardware."
         )
 
-    def think(self, user_input: str):
+    def think(self, user_input):
         return self.engine.generate(user_input, self.system_persona)
 
-    def think_stream(self, user_input: str):
+    def think_stream(self, user_input):
         return self.engine.stream(user_input, self.system_persona)
         
     def status_check(self) -> bool:

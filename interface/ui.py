@@ -183,8 +183,21 @@ def main_page():
                  
         # 3. Stream
         full_response = ""
+        
+        # Prepare Context
+        # Load existing history (stripped to role/content)
+        history = memory_manager.get_messages(current_chat_id)
+        
+        # Sliding Window: Keep only the last 20 messages to prevent overflow
+        if len(history) > 20:
+            history = history[-20:]
+            
+        # Add current message
+        current_context = history + [{"role": "user", "content": user_msg}]
+        
         try:
-            for chunk in my_brain.think_stream(user_msg):
+            # Pass constrained context to think_stream
+            for chunk in my_brain.think_stream(current_context):
                 full_response += chunk
                 response_content.set_content(full_response)
                 await asyncio.sleep(0)
