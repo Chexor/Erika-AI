@@ -8,7 +8,15 @@ import sys
 from core.brain import Brain
 
 def create_icon(color="blue"):
-    # Create a simple 64x64 icon with dynamic color
+    # Try to load custom logo
+    logo_path = os.path.join(os.path.dirname(__file__), 'assets', 'Erika-AI_logo_transparant.png')
+    if os.path.exists(logo_path):
+        try:
+            return Image.open(logo_path)
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+
+    # Fallback: Create a simple 64x64 icon with dynamic color
     # color map
     colors = {
         "blue": (100, 200, 255),
@@ -26,9 +34,12 @@ def create_icon(color="blue"):
     dc.rectangle((width // 4, height // 4, width * 3 // 4, height * 3 // 4), fill=fill_color)
     return image
 
+import webbrowser
+
 def on_open(icon, item):
     print("Opening...")
-    # NiceGUI window is already open or managed by ui.run
+    # Open the browser to the NiceGUI app
+    webbrowser.open('http://localhost:8080')
 
 def on_exit(icon, item):
     icon.stop()
@@ -60,6 +71,5 @@ if __name__ == '__main__':
     tray_thread.start()
     
     # Run UI
-    # Native mode uses pywebview
-    # switching to False for debugging
-    ui.run(native=False, title="Erika AI", reload=False)
+    # Browser Mode
+    ui.run(native=False, title="Erika AI", reload=False, show=True)

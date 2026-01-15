@@ -11,7 +11,7 @@ Erika is an autonomous, local-first AI assistant designed to live natively withi
 
 ## 🛠️ Architecture
 - **Language**: Python
-- **Interface**: NiceGUI / Streamlit (Local Web-Native UI)
+- **Interface**: NiceGUI (Web-Native UI, currently running in Browser Mode)
 - **Protocol**: Model Context Protocol (MCP) Client
 - **LLM Backend**: Agnostic (OpenAI API Compatible / Local Endpoints)
 
@@ -35,3 +35,6 @@ Ensure your local LLM is running (e.g., `ollama serve`), then start Erika:
 ```bash
 python main.py
 ```
+This will launch the application in your default web browser (Browser Mode).
+- **System Tray**: Erika runs as a background process. Look for the Erika icon in your system tray.
+- **UI**: A dark-themed chat interface ("Ollama WebUI" style) will open at `http://localhost:8080`.

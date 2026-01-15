@@ -20,3 +20,6 @@ class Brain:
         
     def status_check(self) -> bool:
         return self.engine.check_connection()
+
+    def get_model_name(self) -> str:
+        return self.engine.model_name
