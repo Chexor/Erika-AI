@@ -15,6 +15,13 @@ Erika is an autonomous, local-first AI assistant designed to live natively withi
 - **Protocol**: Model Context Protocol (MCP) Client
 - **LLM Backend**: Agnostic (OpenAI API Compatible / Local Endpoints)
 
+### 📦 Logic Modules
+- **Core Brain**: LLM orchestration and persona management.
+- **Memory**: Persistent JSON-based chat history with date categorization.
+- **Vision**: Image analysis using local models (JoyCaption).
+- **Voice/Listen**: (Placeholder) Future TTS and STT modules.
+- **Coder/Web/Scheduler**: (Placeholder) Future agentic capabilities.
+
 ---
 
 ## Installation & Usage
@@ -24,6 +31,7 @@ Erika is an autonomous, local-first AI assistant designed to live natively withi
 - **Local LLM Server**: You need to have a local LLM server running (e.g., [Ollama](https://ollama.com/)).
   - Default url: `http://localhost:11434/v1`
   - Default model: `llama3` (run `ollama pull llama3`)
+  - **Vision Model**: `joycaption` (run `ollama pull joycaption` for image analysis)
 
 ### 2. Install dependencies
 ```bash
