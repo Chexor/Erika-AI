@@ -2,3 +2,4 @@ nicegui
 pystray
 Pillow
 pywebview
+openai
