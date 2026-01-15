@@ -162,3 +162,4 @@ cython_debug/
 # Erika Specific
 erika_home/logs/
 erika_home/memory.json
+GEMINI.md
