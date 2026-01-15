@@ -1,30 +1,28 @@
 import threading
 import pystray
 from PIL import Image, ImageDraw
-from interface.ui import run_interface
+from nicegui import ui
+import interface.ui  # Import to register the page layout
 import os
-import webbrowser
+import sys
 
 def create_icon():
-    # Create a simple icon
+    # Create a simple 64x64 blue icon
     width = 64
     height = 64
     image = Image.new('RGB', (width, height), color=(55, 55, 55))
     dc = ImageDraw.Draw(image)
-    dc.rectangle((width // 4, height // 4, width * 3 // 4, height * 3 // 4), fill=(100, 200, 255))
+    # Draw a blue rectangle/square in the middle
+    dc.rectangle((width // 4, height // 4, width * 3 // 4, height * 3 // 4), fill=(0, 0, 255))
     return image
 
 def on_open(icon, item):
-    print("Open clicked")
-    # In native mode, the window is already managed by pywebview.
-    # If we were in browser mode, we could do:
-    # webbrowser.open('http://localhost:8080')
-    pass
+    print("Opening...")
+    # NiceGUI window is already open or managed by ui.run
 
 def on_exit(icon, item):
     icon.stop()
-    # Force exit to kill NiceGUI/Uvicorn
-    os._exit(0)
+    ui.shutdown()
 
 def setup_tray():
     icon = pystray.Icon("Erika", create_icon(), menu=pystray.Menu(
@@ -39,5 +37,5 @@ if __name__ == '__main__':
     tray_thread.start()
     
     # Run UI
-    print("Starting Erika UI...")
-    run_interface()
+    # Native mode uses pywebview
+    ui.run(native=True, title="Erika AI", reload=False)
