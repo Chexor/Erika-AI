@@ -1,6 +1,6 @@
-# Erika AI
+# Erika-AI
 
-A local AI assistant with a System Tray icon and a Chat UI.
+**Erika: A local-first, agentic AI hub app for desktop automation. Powered by Python, Local LLMs, and the Model Context Protocol (MCP).**
 
 ## Installation
 
