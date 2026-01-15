@@ -160,6 +160,6 @@ cython_debug/
 .pypirc
 
 # Erika Specific
-erika_home/logs/
-erika_home/memory.json
+erika_home/
 GEMINI.md
+*.log

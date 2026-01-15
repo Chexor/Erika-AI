@@ -46,3 +46,23 @@ python main.py
 This will launch the application in your default web browser (Browser Mode).
 - **System Tray**: Erika runs as a background process. Look for the Erika icon in your system tray.
 - **UI**: A dark-themed chat interface ("Ollama WebUI" style) will open at `http://localhost:8080`.
+
+## ✨ New Features (Jan 2026)
+
+### 🧠 Short-Term Memory Context
+- **Context Awareness**: Erika now remembers the conversation history of the current session.
+- **Sliding Window**: To prevent exceeding the LLM's context limit, only the last **20 messages** are sent to the model for generation. The full history is still saved to disk.
+
+### ⚙️ Dual-Settings Architecture
+- **User Settings (UI)**: Click your profile in the sidebar to change your **Username** and toggle **Dark Mode**. These settings persist across sessions (`user.json`).
+- **System Settings (Tray)**: Right-click the system tray icon and select "System Settings" to open the core configuration file (`system.json`) in your default editor. Use this to configure the LLM URL, model name, and context window.
+
+### 📝 Centralized Logging
+- **Logs**: Detailed debug logs are written to `erika_home/logs/erika.log`. This file rotates automatically (max 5MB).
+- **Console**: The terminal output remains clean, showing only high-level INFO status updates.
+
+## 📂 Directory Structure
+Erika creates a `erika_home/` directory in the project root:
+- `chats/`: Stores conversation history (JSON).
+- `config/`: Stores `user.json` and `system.json`.
+- `logs/`: Stores `erika.log`.

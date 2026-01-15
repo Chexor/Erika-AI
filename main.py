@@ -6,6 +6,10 @@ import interface.ui  # Import to register the page layout
 import os
 import sys
 from core.brain import Brain
+from core.settings import SYS_CONF_PATH
+from core.logger import setup_logger
+
+logger = setup_logger("Main")
 
 def create_icon(color="blue"):
     # Try to load custom logo
@@ -14,7 +18,7 @@ def create_icon(color="blue"):
         try:
             return Image.open(logo_path)
         except Exception as e:
-            print(f"Error loading logo: {e}")
+            logger.error(f"Error loading logo: {e}")
 
     # Fallback: Create a simple 64x64 icon with dynamic color
     # color map
@@ -36,51 +40,61 @@ def create_icon(color="blue"):
 
 import webbrowser
 
+
 def on_open(icon, item):
-    print("Opening...")
+    logger.info("Tray: Opening UI...")
     # Open the browser to the NiceGUI app
     webbrowser.open('http://localhost:8080')
 
 def on_settings(icon, item):
-    print("Settings clicked. Opening app...")
+    logger.info("Tray: Settings clicked. Opening app...")
     webbrowser.open('http://localhost:8080')
 
+def on_system_settings(icon, item):
+    logger.info("Tray: Opening system config file...")
+    try:
+        os.startfile(SYS_CONF_PATH)
+    except Exception as e:
+        logger.error(f"Tray: Error opening config: {e}")
+
 def on_restart(icon, item):
-    print("Restarting...")
+    logger.info("Tray: Restarting...")
     icon.stop()
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 def on_exit(icon, item):
+    logger.info("Tray: Exiting...")
     icon.stop()
     ui.shutdown()
 
 def setup_tray(initial_status: bool):
-    print(f"DEBUG: Starting tray with status={initial_status}")
+    logger.debug(f"Starting tray with status={initial_status}")
     color = "green" if initial_status else "red"
     
     # Menu Definition
     # 'default=True' makes 'Open Erika' trigger on left-click (Windows behavior varies, usually double-click)
     menu = pystray.Menu(
         pystray.MenuItem("Open Erika", on_open, default=True),
-        pystray.MenuItem("Settings", on_settings),
+        pystray.MenuItem("Settings (UI)", on_settings),
+        pystray.MenuItem("System Settings", on_system_settings),
         pystray.MenuItem("Restart", on_restart),
         pystray.MenuItem("Quit", on_exit)
     )
 
     icon = pystray.Icon("Erika", create_icon(color), menu=menu)
-    print("DEBUG: Tray icon created. Running icon loop...")
+    logger.info("Tray icon created. Running icon loop...")
     icon.run()
-    print("DEBUG: Tray icon loop ended.")
+    logger.debug("Tray icon loop ended.")
 
 if __name__ == '__main__':
     # Initial Health Check
-    print("🧠 Checking Brain Health...")
+    logger.info("🧠 Checking Brain Health...")
     brain = Brain()
     is_alive = brain.status_check()
     if is_alive:
-        print("✅ Brain is connected.")
+        logger.info("✅ Brain is connected.")
     else:
-        print("❌ Brain disconnected (Ollama not visible).")
+        logger.warning("❌ Brain disconnected (Ollama not visible).")
 
     # Start tray in a separate thread so NiceGUI can be main thread
     tray_thread = threading.Thread(target=setup_tray, args=(is_alive,), daemon=True)
@@ -88,4 +102,5 @@ if __name__ == '__main__':
     
     # Run UI
     # Browser Mode
+    logger.info("🚀 Starting NiceGUI Server...")
     ui.run(native=False, title="Erika AI", reload=False, show=True)

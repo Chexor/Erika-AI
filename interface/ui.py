@@ -1,15 +1,20 @@
 from nicegui import ui, app
 from core.brain import Brain
 from core.memory import MemoryManager
+from core.settings import SettingsManager
+from core.logger import setup_logger
 import asyncio
 from datetime import datetime, timedelta
 
 # Instantiate Brain at top level to keep it alive
+logger = setup_logger("UI")
 my_brain = Brain()
 memory_manager = MemoryManager()
+settings_manager = SettingsManager()
 
 # --- Connection Logic ---
 async def on_connect_handler(client):
+    logger.info(f"New client connected: {client.id}")
     await check_brain_status()
 
 app.on_connect(on_connect_handler)
@@ -28,11 +33,47 @@ def main_page():
     
     # 1. Global Theme & Dark Mode
     ui.colors(primary='#3b82f6', dark='#0f172a') # Blue-500, Slate-900
-    ui.dark_mode().enable()
+    dark_mode = ui.dark_mode()
+    
+    # Load User Settings
+    u_name = settings_manager.get_user_setting("username", "User")
+    u_theme = settings_manager.get_user_setting("theme", "dark")
+    
+    if u_theme == 'dark':
+        dark_mode.enable()
+    else:
+        dark_mode.disable()
     
     # Force background color for the body
     ui.query('body').style('background-color: #212121;')
     ui.query('body').classes('text-gray-100 font-sans antialiased')
+
+    # --- SETTINGS DIALOG ---
+    with ui.dialog() as user_settings_dialog, ui.card().classes('bg-gray-800 text-white p-6 w-96'):
+        ui.label('User Settings').classes('text-xl font-bold mb-4')
+        
+        name_input = ui.input('Your Name', value=u_name).classes('w-full mb-4').props('dark')
+        
+        # Dark Mode Toggle
+        def toggle_theme():
+            if dark_mode.value: # Currently Dark
+                 dark_mode.disable()
+                 settings_manager.set_user_setting("theme", "light")
+            else:
+                 dark_mode.enable()
+                 settings_manager.set_user_setting("theme", "dark")
+                 
+        ui.switch('Dark Mode', value=True if u_theme == 'dark' else False, on_change=toggle_theme).classes('mb-6')
+
+        with ui.row().classes('w-full justify-end'):
+            def save_user_settings():
+                new_name = name_input.value
+                settings_manager.set_user_setting("username", new_name)
+                user_name_label.set_text(new_name)
+                user_settings_dialog.close()
+                ui.notify('Settings Saved', type='positive')
+                
+            ui.button('Save', on_click=save_user_settings).props('flat color=white')
 
     # --- UI Layout Containers ---
     # We define placeholders for dynamic content
@@ -48,9 +89,10 @@ def main_page():
         history_column = ui.column().classes('flex-grow overflow-y-auto gap-2')
         
         # User Profile (Bottom)
-        with ui.row().classes('w-full items-center gap-3 pt-4 border-t border-gray-800'):
+        with ui.row().classes('w-full items-center gap-3 pt-4 border-t border-gray-800 cursor-pointer hover:bg-gray-800 p-2 rounded transition-colors').on('click', user_settings_dialog.open):
             ui.avatar(icon='person', color='gray-700', text_color='white').props('size=sm')
-            ui.label('Tim').classes('text-sm font-medium text-white')
+            user_name_label = ui.label(u_name).classes('text-sm font-medium text-white')
+            ui.icon('settings', color='gray-500').classes('ml-auto text-xs')
 
     # Main Chat Area
     with ui.column().classes('w-full max-w-3xl mx-auto h-screen p-4 pb-32 relative') as chat_container:
