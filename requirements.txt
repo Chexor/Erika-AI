@@ -1,0 +1,4 @@
+nicegui
+pystray
+Pillow
+pywebview
