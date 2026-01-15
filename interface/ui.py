@@ -79,20 +79,23 @@ def main_page():
         history_column = ui.column().classes('flex-grow overflow-y-auto gap-2')
         
         # User Profile (Bottom)
-        with ui.row().classes('w-full items-center gap-3 pt-4 border-t border-gray-800 cursor-pointer hover:bg-gray-800 p-2 rounded transition-colors').on('click', settings_modal.open):
+        with ui.row().classes('w-full items-center gap-3 pt-4 border-t border-gray-800 cursor-pointer hover:bg-gray-800 p-2 rounded transition-colors group').on('click', settings_modal.open):
             ui.avatar(icon='person', color='gray-700', text_color='white').props('size=sm')
-            user_name_label = ui.label(u_name).classes('text-sm font-medium text-white')
-            ui.icon('settings', color='gray-500').classes('ml-auto text-xs')
+            user_name_label = ui.label(u_name).classes('text-sm font-medium text-white group-hover:text-blue-400 transition-colors')
+            ui.icon('settings', color='gray-500').classes('ml-auto text-xs group-hover:text-white transition-colors')
 
     # Main Chat Area
-    with ui.column().classes('w-full max-w-3xl mx-auto h-screen p-4 pb-32 relative') as chat_container:
+    with ui.column().classes('w-full max-w-4xl mx-auto min-h-screen p-4 pb-48 relative') as chat_container:
         # Empty State (Initial)
-        empty_state = ui.column().classes('w-full h-full justify-center items-center gap-6 opacity-40 select-none')
+        empty_state = ui.column().classes('w-full h-full justify-center items-center gap-6 opacity-40 select-none mt-32')
         with empty_state:
-            ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-32 opacity-80')
+            ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-32 opacity-80 mix-blend-screen')
             ui.label('How can I help you today?').classes('text-2xl font-semibold text-gray-500')
 
     # --- Logic Functions ---
+
+    def scroll_to_bottom():
+        ui.run_javascript('window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });')
 
     def render_message(role, content):
         """Renders a single message bubble."""
@@ -106,6 +109,12 @@ def main_page():
                          ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-8 h-8 rounded-full bg-gray-800')
                      # Markdown Extras enabled
                      ui.markdown(content, extras=['fenced-code-blocks', 'tables', 'latex']).classes('text-gray-100 text-base leading-relaxed max-w-full overflow-hidden prose prose-invert')
+        
+        # Spacer to ensure visibility above input bar
+        with chat_container:
+            ui.element('div').classes('h-32 w-full')
+            
+        scroll_to_bottom()
 
     def load_new_chat():
         nonlocal current_chat_id
@@ -139,6 +148,8 @@ def main_page():
             render_message(msg['role'], msg['content'])
             
         refresh_history_ui()
+        # Scroll after a brief delay to ensure rendering
+        ui.timer(0.1, scroll_to_bottom, once=True)
 
     def refresh_history_ui():
         history_column.clear()
@@ -179,9 +190,9 @@ def main_page():
                 ui.label(title).classes('text-xs font-bold text-gray-500 px-2 mt-4 mb-1 uppercase')
                 for chat in chat_list:
                     bg_class = 'bg-gray-800' if chat['id'] == current_chat_id else 'hover:bg-gray-800'
-                    ui.button(chat['title'], on_click=lambda c=chat['id']: load_specific_chat(c)) \
-                        .classes(f'w-full text-left text-sm text-gray-400 {bg_class} rounded px-2 py-1 truncate transition-colors') \
-                        .props('flat no-caps')
+                    ui.button(chat['title'], icon='chat_bubble_outline', on_click=lambda c=chat['id']: load_specific_chat(c)) \
+                        .classes(f'w-full text-left justify-start truncate text-sm text-gray-400 {bg_class} rounded px-2 py-1 transition-colors') \
+                        .props('flat no-caps align=left')
 
             render_section('Today', today_chats)
             render_section('Yesterday', yesterday_chats)
@@ -247,7 +258,8 @@ def main_page():
                     break
                 full_response += chunk
                 response_content.set_content(full_response)
-                # await asyncio.sleep(0) # Not needed with async iterator, but harmless
+                if len(full_response) % 50 == 0: # Scroll periodically
+                    scroll_to_bottom()
             
             # 4. Save to Memory
             memory_manager.save_turn(current_chat_id, user_msg, full_response)
@@ -270,18 +282,18 @@ def main_page():
         ui.notify("Stopping generation...")
     
     # --- Floating Input Bar ---
-    with ui.page_sticky(position='bottom', x_offset=0, y_offset=40).classes('w-full flex justify-center px-4'):
-        with ui.row().classes('w-full max-w-3xl bg-gray-700/90 backdrop-blur-sm rounded-full p-2 pl-4 items-center shadow-2xl border border-gray-600'):
-            # Model Chip (Read Only)
+    with ui.page_sticky(position='bottom').classes('w-full flex justify-center pb-8 px-4'):
+        with ui.row().classes('w-full max-w-5xl bg-[#2f2f2f] rounded-2xl shadow-xl border border-white/10 p-2 pl-4 items-end'):
+             # Model Chip (Read Only)
             model_name = my_brain.get_model_name()
-            ui.chip(model_name, icon='psychology').props('outline color=grey-4').classes('text-xs font-bold mr-2 uppercase select-none opacity-80')
+            ui.chip(model_name, icon='psychology').props('outline color=grey-4').classes('text-xs font-bold mr-2 mb-2 uppercase select-none opacity-50')
             
             text_input = ui.textarea(placeholder='Send a message') \
-                .props('autogrow rows=1 borderless input-class="text-white placeholder-gray-400"') \
-                .classes('col-grow text-white text-base max-h-40 mx-2') \
+                .props('autogrow rows=1 borderless input-class="text-white placeholder-gray-500"') \
+                .classes('col-grow text-white text-base min-h-[44px] max-h-[160px] mx-2 py-2') \
                 .on('keydown.enter.prevent', lambda: asyncio.create_task(send())) 
             
-            with ui.row().classes('items-center gap-2 pr-1'):
+            with ui.row().classes('items-center gap-2 pr-1 mb-1'):
                 # Stop Button (Hidden by default)
                 stop_btn = ui.button(icon='stop_circle', on_click=stop_generation) \
                     .props('flat round color=red') \

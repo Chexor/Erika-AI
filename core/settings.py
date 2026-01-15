@@ -71,3 +71,11 @@ class SettingsManager:
     def set_system_setting(self, key, value):
         self.sys_config[key] = value
         self._save_file(SYS_CONF_PATH, self.sys_config)
+
+    def save_user_settings(self, new_config):
+        self.user_config.update(new_config)
+        self._save_file(USER_CONF_PATH, self.user_config)
+
+    def save_system_settings(self, new_config):
+        self.sys_config.update(new_config)
+        self._save_file(SYS_CONF_PATH, self.sys_config)

@@ -9,32 +9,76 @@ class SettingsModal:
     def __init__(self, settings_manager: SettingsManager, on_theme_toggle=None):
         self.settings = settings_manager
         self.on_theme_toggle = on_theme_toggle
+        
+        # State Management (Copies for binding)
+        self.pending_user = self.settings.user_config.copy()
+        self.pending_sys = self.settings.sys_config.copy()
+        
         self.dialog = ui.dialog()
-        with self.dialog, ui.card().classes('w-[90vw] max-w-[800px] h-[80vh] max-h-[600px] p-0 flex flex-col bg-gray-900 border border-gray-700 no-wrap'):
+        with self.dialog, ui.card().classes('w-full max-w-[850px] h-[700px] max-h-[90vh] p-0 flex flex-col bg-[#212121] border border-white/10 no-wrap'):
             # --- Header ---
-            with ui.row().classes('w-full justify-between items-center p-4 border-b border-gray-700 bg-gray-800'):
+            with ui.row().classes('w-full justify-between items-center p-4 border-b border-white/10 bg-[#212121]'):
                 ui.label('Settings').classes('text-xl font-bold text-white')
                 ui.button(icon='close', on_click=self.dialog.close).props('flat round color=white')
 
             # --- Body ---
             with ui.row().classes('w-full flex-grow overflow-hidden gap-0 no-wrap'):
                 # Left Sidebar (Navigation)
-                with ui.column().classes('w-64 h-full bg-gray-800/50 p-4 gap-2 border-r border-gray-700'):
-                    self.nav_interface = ui.button('Interface', on_click=lambda: self.show_tab('interface')).props('flat align=left').classes('w-full text-gray-300 hover:bg-gray-700 hover:text-white rounded-md')
-                    self.nav_personalization = ui.button('Personalization', on_click=lambda: self.show_tab('personalization')).props('flat align=left').classes('w-full text-gray-300 hover:bg-gray-700 hover:text-white rounded-md')
-                    self.nav_memory = ui.button('Memory', on_click=lambda: self.show_tab('memory')).props('flat align=left').classes('w-full text-gray-300 hover:bg-gray-700 hover:text-white rounded-md')
-                    self.nav_system = ui.button('System', on_click=lambda: self.show_tab('system')).props('flat align=left').classes('w-full text-gray-300 hover:bg-gray-700 hover:text-white rounded-md')
-                    self.nav_tools = ui.button('Tools', on_click=lambda: self.show_tab('tools')).props('flat align=left').classes('w-full text-gray-300 hover:bg-gray-700 hover:text-white rounded-md')
-                    self.nav_about = ui.button('About', on_click=lambda: self.show_tab('about')).props('flat align=left').classes('w-full text-gray-300 hover:bg-gray-700 hover:text-white rounded-md')
+                with ui.column().classes('w-64 h-full bg-[#171717] p-3 gap-1 border-r border-white/10'):
+                    self.nav_btns = {}
+                    
+                    def nav_button(label, icon, tab):
+                        btn = ui.button(label, icon=icon, on_click=lambda: self.show_tab(tab)) \
+                            .props('flat align=left') \
+                            .classes('w-full rounded-md text-sm font-medium px-3 py-2 transition-colors duration-200 text-gray-400 hover:bg-[#2f2f2f]/50')
+                        self.nav_btns[tab] = btn
+                        return btn
+
+                    nav_button('Interface', 'palette', 'interface')
+                    nav_button('Personalization', 'person', 'personalization')
+                    nav_button('Memory', 'history', 'memory')
+                    nav_button('System', 'dns', 'system')
+                    nav_button('Tools', 'extension', 'tools')
+                    ui.separator().classes('bg-white/10 my-2')
+                    nav_button('About', 'info', 'about')
+                    
+                    ui.space()
+                    ui.button('Save', icon='save', on_click=self.save_changes) \
+                        .classes('w-full bg-blue-600 hover:bg-blue-700 text-white rounded-md mb-2')
 
                 # Right Content (Dynamic)
-                with ui.column().classes('flex-grow min-w-0 h-full p-8 overflow-y-auto bg-gray-900 text-white') as self.content_area:
+                with ui.column().classes('flex-grow min-w-0 h-full p-8 overflow-y-auto bg-[#212121] text-white scroll-smooth') as self.content_area:
+                    self.current_tab = 'interface'
                     self.render_interface_tab() # Default
+
+    def save_changes(self):
+        # 1. Save System Settings
+        self.settings.save_system_settings(self.pending_sys)
+        
+        # 2. Save User Settings and Check Theme
+        old_theme = self.settings.get_user_setting('theme')
+        self.settings.save_user_settings(self.pending_user)
+        
+        # Toggle theme if changed
+        if self.pending_user['theme'] != old_theme and self.on_theme_toggle:
+            self.on_theme_toggle()
+            
+        ui.notify('Settings Saved', type='positive')
+        self.dialog.close()
 
     def open(self):
         self.dialog.open()
 
     def show_tab(self, tab_name):
+        self.current_tab = tab_name
+        
+        # Update styling
+        for t, btn in self.nav_btns.items():
+            if t == tab_name:
+                btn.classes(remove='text-gray-400 hover:bg-[#2f2f2f]/50', add='bg-[#2f2f2f] text-white')
+            else:
+                btn.classes(add='text-gray-400 hover:bg-[#2f2f2f]/50', remove='bg-[#2f2f2f] text-white')
+        
         self.content_area.clear()
         with self.content_area:
             if tab_name == 'interface':
@@ -74,40 +118,39 @@ class SettingsModal:
             root.destroy()
             
             if path:
-                # Add to settings
-                current_paths = self.settings.get_system_setting('model_paths', [])
+                # Add to pending settings
+                current_paths = self.pending_sys.get('model_paths', [])
                 if path not in current_paths:
                     current_paths.append(path)
-                    self.settings.set_system_setting('model_paths', current_paths)
+                    self.pending_sys['model_paths'] = current_paths
                     path_input.set_value(", ".join(current_paths))
-                    ui.notify(f"Added model path: {path}")
+                    ui.notify(f"Added model path (Pending Save): {path}")
         except Exception as e:
             ui.notify(f"Error browsing: {e}", type='negative')
 
     def render_interface_tab(self):
         ui.label('Interface Settings').classes('text-2xl font-semibold mb-6')
         
-        u_theme = self.settings.get_user_setting('theme', 'dark')
+        u_theme = self.pending_user.get('theme', 'dark')
 
         ui.label('Appearance').classes('text-sm font-bold text-gray-500 uppercase mb-2')
         with ui.row().classes('items-center justify-between w-full mb-4'):
              ui.label('Dark Mode').classes('text-base')
              def toggle(e):
-                 if self.on_theme_toggle:
-                     self.on_theme_toggle()
+                 self.pending_user['theme'] = 'dark' if e.value else 'light'
              ui.switch(value=True if u_theme == 'dark' else False, on_change=toggle)
 
     def render_personalization_tab(self):
         ui.label('Personalization').classes('text-2xl font-semibold mb-6')
         
-        u_name = self.settings.get_user_setting('username', 'User')
-        u_persona = self.settings.get_user_setting('persona', '')
+        u_name = self.pending_user.get('username', 'User')
+        u_persona = self.pending_user.get('persona', '')
 
         ui.label('Profile').classes('text-sm font-bold text-gray-500 uppercase mb-2')
-        ui.input('Nickname', value=u_name, on_change=lambda e: self.settings.set_user_setting('username', e.value)).classes('w-full mb-4').props('dark outlined')
+        ui.input('Nickname', value=u_name, on_change=lambda e: self.pending_user.update({'username': e.value})).classes('w-full mb-4').props('dark outlined')
         
         ui.label('System Persona').classes('text-sm font-bold text-gray-500 uppercase mb-2 mt-4')
-        ui.textarea('Custom Instructions', value=u_persona, placeholder='You are a helpful assistant...', on_change=lambda e: self.settings.set_user_setting('persona', e.value)).classes('w-full h-32').props('dark outlined')
+        ui.textarea('Custom Instructions', value=u_persona, placeholder='You are a helpful assistant...', on_change=lambda e: self.pending_user.update({'persona': e.value})).classes('w-full h-32').props('dark outlined')
 
     def render_memory_tab(self):
         ui.label('Memory Settings').classes('text-2xl font-semibold mb-6')
@@ -116,11 +159,11 @@ class SettingsModal:
     def render_system_tab(self):
         ui.label('System Settings').classes('text-2xl font-semibold mb-6')
         
-        # Load Settings
-        sys_model = self.settings.get_system_setting('model', 'llama3')
-        sys_url = self.settings.get_system_setting('ollama_url', 'http://localhost:11434')
-        sys_ctx = self.settings.get_system_setting('context_window', 8192)
-        sys_paths = self.settings.get_system_setting('model_paths', [])
+        # Load Pending Settings
+        sys_model = self.pending_sys.get('model', 'llama3')
+        sys_url = self.pending_sys.get('ollama_url', 'http://localhost:11434')
+        sys_ctx = self.pending_sys.get('context_window', 8192)
+        sys_paths = self.pending_sys.get('model_paths', [])
 
         # Fetch Available Models
         available_models = self._fetch_ollama_models()
@@ -147,11 +190,11 @@ class SettingsModal:
         
         # Model Name (Dropdown)
         ui.select(available_models, value=sys_model, label='Model Name', 
-                  on_change=lambda e: self.settings.set_system_setting('model', e.value)) \
+                  on_change=lambda e: self.pending_sys.update({'model': e.value})) \
             .classes('w-full mb-4').props('dark outlined behavior=menu')
             
         # Ollama URL
-        ui.input('Ollama API URL', value=sys_url, on_change=lambda e: self.settings.set_system_setting('ollama_url', e.value)).classes('w-full mb-4').props('dark outlined')
+        ui.input('Ollama API URL', value=sys_url, on_change=lambda e: self.pending_sys.update({'ollama_url': e.value})).classes('w-full mb-4').props('dark outlined')
         
         # Context Window (Slider)
         ui.label('Context Length').classes('text-sm font-bold text-gray-500 uppercase mb-1 mt-2')
@@ -173,17 +216,16 @@ class SettingsModal:
                 .props('markers snap label')
              
              # Labels row
-             with ui.row().classes('w-full justify-between text-xs text-gray-500 mt-1'):
+             with ui.row().classes('w-full justify-between text-[10px] text-gray-500 mt-1'):
                  for val in ctx_options:
                      ui.label(ctx_labels.get(val, str(val)))
 
         # Link slider change to setting
         def on_slider_change(e):
             val = ctx_options[int(e.value)]
-            self.settings.set_system_setting('context_window', val)
-            ui.notify(f"Context Window set to {val}", type='info')
+            self.pending_sys['context_window'] = val
             
-        slider.on_change(on_slider_change)
+        slider.on_value_change(on_slider_change)
 
     def render_tools_tab(self):
         ui.label('Tools').classes('text-2xl font-semibold mb-6')
