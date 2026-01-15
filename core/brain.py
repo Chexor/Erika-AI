@@ -17,3 +17,6 @@ class Brain:
 
     def think_stream(self, user_input: str):
         return self.engine.stream(user_input, self.system_persona)
+        
+    def status_check(self) -> bool:
+        return self.engine.check_connection()

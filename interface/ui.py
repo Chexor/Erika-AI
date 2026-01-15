@@ -1,9 +1,17 @@
-from nicegui import ui
+from nicegui import ui, app
 from core.brain import Brain
 import asyncio
 
 # Instantiate Brain at top level to keep it alive
 my_brain = Brain()
+
+# Connection Check on UI Load
+app.on_connect(lambda: check_brain_status())
+
+async def check_brain_status():
+    is_connected = await asyncio.to_thread(my_brain.status_check)
+    if not is_connected:
+        ui.notify('⚠️ Brain Disconnected: Is Ollama running?', type='negative', close_button=True, timeout=0)
 
 @ui.page('/')
 def main_page():

@@ -46,3 +46,10 @@ class LocalLLMEngine(LLMProvider):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         return messages
+
+    def check_connection(self) -> bool:
+        try:
+            self.client.models.list()
+            return True
+        except Exception:
+            return False

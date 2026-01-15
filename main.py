@@ -5,15 +5,24 @@ from nicegui import ui
 import interface.ui  # Import to register the page layout
 import os
 import sys
+from core.brain import Brain
 
-def create_icon():
-    # Create a simple 64x64 blue icon
+def create_icon(color="blue"):
+    # Create a simple 64x64 icon with dynamic color
+    # color map
+    colors = {
+        "blue": (100, 200, 255),
+        "green": (50, 200, 50),
+        "red": (255, 50, 50)
+    }
+    fill_color = colors.get(color, colors["blue"])
+    
     width = 64
     height = 64
     image = Image.new('RGB', (width, height), color=(55, 55, 55))
     dc = ImageDraw.Draw(image)
-    # Draw a blue rectangle/square in the middle
-    dc.rectangle((width // 4, height // 4, width * 3 // 4, height * 3 // 4), fill=(0, 0, 255))
+    # Draw a rectangle/square in the middle
+    dc.rectangle((width // 4, height // 4, width * 3 // 4, height * 3 // 4), fill=fill_color)
     return image
 
 def on_open(icon, item):
@@ -24,16 +33,26 @@ def on_exit(icon, item):
     icon.stop()
     ui.shutdown()
 
-def setup_tray():
-    icon = pystray.Icon("Erika", create_icon(), menu=pystray.Menu(
+def setup_tray(initial_status: bool):
+    color = "green" if initial_status else "red"
+    icon = pystray.Icon("Erika", create_icon(color), menu=pystray.Menu(
         pystray.MenuItem("Open Erika", on_open),
         pystray.MenuItem("Exit", on_exit)
     ))
     icon.run()
 
 if __name__ == '__main__':
+    # Initial Health Check
+    print("🧠 Checking Brain Health...")
+    brain = Brain()
+    is_alive = brain.status_check()
+    if is_alive:
+        print("✅ Brain is connected.")
+    else:
+        print("❌ Brain disconnected (Ollama not visible).")
+
     # Start tray in a separate thread so NiceGUI can be main thread
-    tray_thread = threading.Thread(target=setup_tray, daemon=True)
+    tray_thread = threading.Thread(target=setup_tray, args=(is_alive,), daemon=True)
     tray_thread.start()
     
     # Run UI
