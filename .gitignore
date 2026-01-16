@@ -1,31 +1,22 @@
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual Env
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
 venv/
 .venv/
-env/
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Distribution
-build/
-dist/
-*.egg-info/
-
-# Erika AI Data
-erika_home/logs/
-erika_home/chats/
-# We might want to keep config templates but ignore actual config?
-# For now, let's ignore all of erika_home except maybe we want to keep structure if it was checked in, 
-# but usually we ignore user data.
-erika_home/config/user.json
-erika_home/config/system.json
-
-# Logs
-*.log
+# Erika Specific
+logs/
+chats/
+config/user.json
+_legacy_backup/
+tests_temp_*/
 
 # IDE
 .vscode/
 .idea/
-
