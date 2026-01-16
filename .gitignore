@@ -20,3 +20,8 @@ tests_temp_*/
 # IDE
 .vscode/
 .idea/
+
+# Documentation / Agent
+geminiignore.md
+.GEMINIignore
+GEMINI.md
