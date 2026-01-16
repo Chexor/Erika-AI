@@ -1,9 +1,0 @@
-# Context Protection
-_legacy_backup/
-logs/
-*.log
-__pycache__/
-*.pyc
-.git/
-.vscode/
-chats/
