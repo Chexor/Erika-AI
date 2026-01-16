@@ -226,9 +226,13 @@ class SettingsModal:
             def add_action():
                 path = path_input.value.strip()
                 if path and os.path.isdir(path):
+                    # Ensure list exists
+                    if 'model_paths' not in self.pending_sys:
+                         self.pending_sys['model_paths'] = []
+                    
                     if path not in self.pending_sys['model_paths']:
                         self.pending_sys['model_paths'].append(path)
-                        refresh_paths()
+                        refresh_paths() # Dynamic Refresh!
                         path_input.value = ''
                     else:
                         ui.notify('Path already exists.', type='warning')

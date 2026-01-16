@@ -1,30 +1,41 @@
 """interface/main.py
 Assembler for the component-based Erika AI UI.
+Wires Model (State), View (Components), and Controller (Logic).
 """
 from nicegui import ui, app
-from interface.manager import ChatController
-from interface.components import render_sidebar, InputBar, render_chat_messages
-from interface.settings_ui import SettingsModal
 import asyncio
 
-# ---------------------------------------------------------------------
-# Main Page Layout
-# ---------------------------------------------------------------------
+# MVC Components
+from interface.state import AppState
+from interface.controller import ErikaController
+from interface.components import render_sidebar, InputBar, render_chat_messages
+from interface.settings_ui import SettingsModal
 
-# Serve static files for assets (logo, avatars)
-# We assume 'assets' folder is in the project root (relative to running directory)
+# Serve static files
 app.add_static_files('/assets', 'assets')
 
 @ui.page('/')
 def main_page():
+    # 1. Instantiate Model & Controller
+    state = AppState()
+    controller = ErikaController(state)
     
-    # Instantiate Controller per-session (per-tab)
-    controller = ChatController()
+    # 2. Hooks & Callbacks
+    async def startup():
+        controller.startup()
+        # Initial Data Load
+        await controller.load_chat(None) # Clear state
+        controller.get_history_sections() # Load sidebar history
+        refresh_sidebar() # Ensure sidebar is rendered
+        refresh_chat()
+        refresh_input()
+        
+    app.on_connect(startup) 
+    app.on_shutdown(controller.shutdown)
     
-    # Theme handling
+    # 3. Theme Setup
     ui.colors(primary='#3b82f6', dark='#0f172a')
     dark_mode = ui.dark_mode()
-    
     if controller.settings_manager.get_user_setting('theme', 'dark') == 'dark':
         dark_mode.enable()
     else:
@@ -35,113 +46,117 @@ def main_page():
         theme = 'dark' if dark_mode.value else 'light'
         controller.settings_manager.set_user_setting('theme', theme)
 
-    # Shared Settings Modal
+    # 4. Settings Modal
     settings_modal = SettingsModal(controller.settings_manager, on_theme_toggle=toggle_theme)
 
-    # ---------------------------------------------------------
-    # UI Elements & Containers
-    # ---------------------------------------------------------
-
-    # 1. Sidebar Drawer
-    with ui.left_drawer(value=True).classes('bg-gray-900 border-r border-gray-800 flex flex-col gap-4 p-4').style('width: 260px') as left_drawer:
-        drawer_content = ui.column().classes('w-full')
-
-    # 2. Main Chat Area
-    with ui.column().classes('w-full max-w-4xl mx-auto min-h-screen p-4 pb-48') as chat_container:
-        pass # Will be populated by render_chat
-
-    # 3. Input Bar
-    model_name = controller.settings_manager.get_system_setting('model', controller.brain.get_model_name())
-    # We define input bar here but it will be rendered sticky at bottom
-    # We need to bind the on_send to controller.send_message
+    # 5. UI Layout Containers
     
-    async def handle_send(text):
-        await controller.send_message(text)
+    # --- Sidebar ---
+    with ui.left_drawer(value=True).classes('bg-gray-900 border-r border-gray-800 flex flex-col gap-4 p-4').style('width: 260px'):
+        @ui.refreshable
+        def refresh_sidebar():
+            render_sidebar(
+                user_name=controller.settings_manager.get_user_setting('username', 'User'),
+                # For actions that change state, we trigger refreshed
+                on_new_chat=lambda: (controller.load_new_chat(), refresh_chat(), refresh_sidebar()),
+                # History click: Load chat (updating state), then refresh Main & Sidebar (active highlight)
+                on_history_click=lambda cid: (asyncio.create_task(controller.load_chat(cid)), refresh_chat(), refresh_sidebar()),
+                on_settings_click=settings_modal.open,
+                history_sections=state.sidebar_history,
+                current_chat_id=state.current_chat_id
+            )
+        refresh_sidebar()
 
-    # Note: InputBar renders itself into a ui.page_sticky, so just calling it is enough
-    input_control = InputBar(
-        model_name=model_name,
-        on_send=handle_send, 
-        on_stop=controller.stop_generation,
-    )
-
-    # ---------------------------------------------------------
-    # Render Logic
-    # ---------------------------------------------------------
+    # --- Chat Area ---
+    with ui.column().classes('w-full max-w-4xl mx-auto min-h-screen p-4 pb-48') as chat_container:
+        pass 
 
     async def scroll_to_bottom():
         await ui.run_javascript('window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });')
 
-    async def render_sidebar_content():
-        sections = controller.get_history_sections()
-        drawer_content.clear()
-        with drawer_content:
-            render_sidebar(
-                user_name=controller.settings_manager.get_user_setting('username', 'User'),
-                on_new_chat=controller.load_new_chat,
-                on_history_click=controller.load_chat,
-                on_settings_click=settings_modal.open,
-                history_sections=sections,
-                current_chat_id=controller.current_chat_id,
-            )
+    controller.on_scroll_request = scroll_to_bottom
+    
+    # Notification Hook
+    def on_notify_req():
+        while state.notifications:
+            msg, type_ = state.notifications.pop(0)
+            ui.notify(msg, type=type_)
+    controller.on_notification_request = on_notify_req
 
-    # State variable to hold the markdown element of the active response
-    current_response_ui = None
+    current_response_ui = None 
 
-    async def render_chat():
+    @ui.refreshable
+    def refresh_chat():
         nonlocal current_response_ui
         chat_container.clear()
         
-        # Delegate rendering to component
-        current_response_ui = render_chat_messages(chat_container, controller.messages)
-        
-        await scroll_to_bottom()
-        update_input_state()
+        # Callbacks passed to bubbling
+        def on_regen():
+            asyncio.create_task(controller.regenerate_last())
+            refresh_chat()
+            
+        def on_copy(txt):
+            ui.clipboard.write(txt)
+            ui.notify("Copied to clipboard")
+            
+        def on_speak(txt):
+            controller.read_aloud(txt)
 
-    async def stream_update(text):
-        if current_response_ui:
-            current_response_ui.set_content(text)
-            # Optional: Scroll every X chars logic is in manager? No, manager just sends text.
-            # We can scroll every time or use a throttle.
-            # For now, scroll every time might be jittery but correct.
-            # Let's check length for scroll
-            if len(text) % 300 == 0:
-                await scroll_to_bottom()
+        # Render
+        # We render INTO the chat_container column
+        with chat_container:
+             current_response_ui = render_chat_messages(
+                chat_container, 
+                state.messages, 
+                on_regenerate=on_regen,
+                on_copy=on_copy,
+                on_speak=on_speak
+            )
     
-    def update_input_state():
-        # Update InputBar state via the controller object
-        input_control.set_loading(controller.is_generating)
+    refresh_chat()
 
-    # ---------------------------------------------------------
-    # Hook up Callbacks
-    # ---------------------------------------------------------
-    
-    controller.refresh_history_callback = render_sidebar_content
-    controller.refresh_chat_callback = render_chat
-    controller.stream_update_callback = stream_update
-    
-    # ---------------------------------------------------------
-    # Initial Load
-    # ---------------------------------------------------------
-    
-    # Since render_sidebar refers to controller.current_chat_id, we just load sidebar
-    # We should probably initialize the controller state if needed, but it starts empty.
-    # We need to run the render functions once.
-    
-    # Use lifecycle hook to run async functions after connection
-    async def startup():
-        await render_sidebar_content()
-        await render_chat()
+    # --- Input Bar ---
+    @ui.refreshable 
+    def refresh_input():
+        model_name = controller.settings_manager.get_system_setting('model', controller.brain.get_model_name())
         
-    # We can call them immediately since we are in the page builder (they build initial state)
-    # But they are async functions (render_sidebar_content uses async clear?) No clear is sync usually.
-    # `container.clear()` is sync.
-    # However, `render_sidebar_content` is defined as async above to match callback signature?
-    # Actually manager defines callbacks as Coroutine.
+        async def on_send_click(text):
+            # 1. Call controller (Updates state)
+            # 2. Refresh UI to show "Thinking..." state
+            # 3. Stream happens
+            refresh_input() # Update buttons to Stop/Loading
+            refresh_chat() # Show user message
+            await controller.handle_send(text)
+            refresh_input() # Reset buttons
+            
+        def on_stop_click():
+            controller.handle_stop()
+            refresh_input()
+        
+        # We assume InputBar renders into the page_sticky, so we just call it.
+        # But wait, InputBar in components.py renders `ui.page_sticky`. 
+        # If we call it inside `refresh_input`, it will duplicate sticky footers?
+        # NO, ui.refreshable creates a container. The sticky will be inside that container?
+        # Standard sticky behaviour might be weird inside a refreshable.
+        # Let's hope NiceGUI handles it.
+        
+        ctrl = InputBar(
+            model_name=model_name, 
+            on_send=on_send_click,
+            on_stop=on_stop_click
+        )
+        ctrl.set_loading(state.is_generating)
+        
+    refresh_input()
     
-    # Let's run them.
-    # Note: Can't await directly in page builder unless it's an async page?
-    # Page function is sync `def main_page():`.
-    # So we use `app.on_connect` or `ui.timer` with 0 delay.
-    
-    ui.timer(0, startup, once=True)
+    # Streaming Optimization
+    # We use a timer to push updates to the LAST bubble if generating
+    async def update_stream():
+        if state.is_generating and state.messages:
+            last_msg = state.messages[-1]
+            if last_msg['role'] == 'assistant' and current_response_ui:
+                current_response_ui.set_content(last_msg['content'])
+                if len(last_msg['content']) % 300 == 0: # Light scroll check
+                    await scroll_to_bottom()
+                    
+    ui.timer(0.1, update_stream)

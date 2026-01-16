@@ -5,35 +5,59 @@ Pure UI rendering functions for Erika AI.
 from nicegui import ui
 from typing import List, Dict
 
-def render_chat_messages(chat_container, messages: List[Dict]):
-    """Renders the chat messages into the container.
-    Returns the markdown UI element of the last assistant message (for streaming).
-    """
+
+
+def ChatBubble(message: Dict, on_regenerate=None, on_copy=None, on_speak=None):
+    """Renders a single chat bubble with actions for assistant messages."""
+    role = message['role']
+    content = message['content']
+    
+    if role == 'user':
+        with ui.row().classes('w-full justify-end mb-4 group'):
+            ui.label(content).classes('bg-gray-700 text-white rounded-3xl px-5 py-3 max-w-[85%] text-base leading-relaxed break-words')
+    else:
+        with ui.row().classes('w-full justify-start mb-6 gap-4 items-start group relative'):
+            # Avatar
+            with ui.element('div').classes('min-w-[32px] pt-1'):
+                 if message.get('avatar'):
+                        ui.image(message['avatar']).classes('w-8 h-8 rounded-full bg-gray-800')
+            
+            # Message Content & Actions Container
+            with ui.column().classes('max-w-full flex-grow'):
+                # Markdown Content
+                md = ui.markdown(content, extras=['fenced-code-blocks', 'tables', 'latex']).classes('text-gray-100 text-base leading-relaxed max-w-full prose prose-invert break-words')
+                
+                # Action Row
+                with ui.row().classes('opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1 mt-1'):
+                    if on_regenerate:
+                        ui.button(icon='refresh', on_click=on_regenerate).props('flat round dense size=sm color=grey').tooltip('Regenerate')
+                    if on_copy:
+                        ui.button(icon='content_copy', on_click=lambda: on_copy(content)).props('flat round dense size=sm color=grey').tooltip('Copy')
+                    if on_speak:
+                        ui.button(icon='volume_up', on_click=lambda: on_speak(content)).props('flat round dense size=sm color=grey').tooltip('Read Aloud')
+
+                return md 
+    return None
+
+
+def render_chat_messages(chat_container, messages: List[Dict], on_regenerate, on_copy, on_speak):
+    """Renders the chat messages into the container."""
     current_response_ui = None
     
     with chat_container:
         if not messages:
             with ui.column().classes('w-full h-full justify-center items-center gap-6 opacity-40 select-none mt-32'):
-                # Note: creating image with absolute path /assets/... assumes assets is served at root
                 ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-32 opacity-80 mix-blend-screen')
                 ui.label('How can I help you today?').classes('text-2xl font-semibold text-gray-500')
             return None
 
         for msg in messages:
-            if msg['role'] == 'user':
-                with ui.row().classes('w-full justify-end mb-4'):
-                    ui.label(msg['content']).classes('bg-gray-700 text-white rounded-3xl px-5 py-3 max-w-[85%] text-base leading-relaxed')
-            else:
-                with ui.row().classes('w-full justify-start mb-6 gap-4 items-start'):
-                    with ui.element('div').classes('min-w-[32px] pt-1'):
-                        # Avatar should be provided by controller
-                        if msg.get('avatar'):
-                             ui.image(msg['avatar']).classes('w-8 h-8 rounded-full bg-gray-800')
-                    
-                    # Store reference to the LAST assistant message for streaming
-                    # We only care about the last one.
-                    md = ui.markdown(msg['content'], extras=['fenced-code-blocks', 'tables', 'latex']).classes('text-gray-100 text-base leading-relaxed max-w-full prose prose-invert')
-                    current_response_ui = md
+            # We pass callbacks down
+            # Note: For efficiency, we might only want actions on the *last* assistant message?
+            # Or all of them. Let's do all.
+            md = ChatBubble(msg, on_regenerate, on_copy, on_speak)
+            if msg['role'] == 'assistant':
+                current_response_ui = md
                     
     return current_response_ui
 
