@@ -4,7 +4,18 @@ from core.logger import setup_logger
 from core.settings import SettingsManager
 
 class Brain:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(Brain, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self):
+        if self._initialized:
+            return
+            
         self.logger = setup_logger("Brain")
         self.settings_manager = SettingsManager()
 
@@ -24,6 +35,7 @@ class Brain:
             "You are helpful, concise, and run entirely on the user's hardware."
         )
         self.logger.info(f"Initialized Brain with model: {llm_model_name}")
+        self._initialized = True
 
     def _get_system_prompt(self):
         return self.settings_manager.get_user_setting('persona', self.default_persona)

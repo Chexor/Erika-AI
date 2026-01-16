@@ -4,6 +4,7 @@ Controller layer for Erika AI chat UI.
 import asyncio
 from typing import Dict, List, Coroutine
 from datetime import datetime, timedelta
+import os
 
 from nicegui import ui
 from core.brain import Brain
@@ -12,6 +13,8 @@ from core.settings import SettingsManager
 
 class ChatController:
     """Handles state and data logic, completely decoupled from UI rendering."""
+    
+    DEFAULT_AVATAR = '/assets/Erika-AI_logo2_transparant.png'
 
     def __init__(self):
         # Core components
@@ -29,6 +32,8 @@ class ChatController:
 
         # UI Callbacks - to be set by the UI layer
         self.refresh_history_callback: Coroutine = None
+        self.refresh_chat_callback: Coroutine = None
+        self.stream_update_callback: Coroutine = None
         
     def get_history_sections(self) -> Dict[str, List[dict]]:
         """Return chats grouped by date for the sidebar."""
@@ -41,7 +46,7 @@ class ChatController:
                 chat_date = datetime.fromisoformat(chat['updated_at']).date()
             except (ValueError, TypeError):
                 chat_date = datetime.min.date()
-            
+
             if chat_date == today:
                 sections['Today'].append(chat)
             elif chat_date == yesterday:
@@ -50,7 +55,7 @@ class ChatController:
                 sections['Older'].append(chat)
         return sections
 
-    def load_chat(self, chat_id: str):
+    async def load_chat(self, chat_id: str):
         """Loads a chat's message history into the controller's state."""
         self.current_chat_id = chat_id
         chat_data = self.memory_manager.load_chat(chat_id)
@@ -63,13 +68,14 @@ class ChatController:
                     'content': msg['content'],
                     'stamp': datetime.fromisoformat(msg['timestamp']).strftime('%I:%M %p'),
                     'name': 'You' if msg['role'] == 'user' else 'Erika',
-                    'avatar': None if msg['role'] == 'user' else '/assets/Erika-AI_logo2_transparant.png'
+                    'avatar': None if msg['role'] == 'user' else self.DEFAULT_AVATAR
                 })
-        # Important: We need to trigger an update on the UI that is bound to this list
-        # This is typically done via ui.update() on the component, or by modifying a list that the component is bound to.
-        # NiceGUI's binding should handle this automatically when we modify `self.messages`.
+        
+        # Trigger UI refresh
         if self.refresh_history_callback:
             asyncio.create_task(self.refresh_history_callback())
+        if self.refresh_chat_callback:
+            asyncio.create_task(self.refresh_chat_callback())
 
     def load_new_chat(self):
         """Resets the state to a new, empty chat."""
@@ -77,6 +83,8 @@ class ChatController:
         self.messages.clear()
         if self.refresh_history_callback:
             asyncio.create_task(self.refresh_history_callback())
+        if self.refresh_chat_callback:
+            asyncio.create_task(self.refresh_chat_callback())
 
     async def send_message(self, user_msg: str):
         """Handles the logic of sending a message and getting a response."""
@@ -85,10 +93,10 @@ class ChatController:
 
         self.is_generating = True
         self._stop_flag = False
-        
+
         # Add user message to the UI
         self.messages.append({
-            'role': 'user', 'content': user_msg, 
+            'role': 'user', 'content': user_msg,
             'stamp': datetime.now().strftime('%I:%M %p'), 'name': 'You', 'avatar': None
         })
 
@@ -96,14 +104,18 @@ class ChatController:
         assistant_message_id = len(self.messages)
         self.messages.append({
             'role': 'assistant', 'content': '...', 'stamp': datetime.now().strftime('%I:%M %p'),
-            'name': 'Erika', 'avatar': '/assets/Erika-AI_logo2_transparant.png'
+            'name': 'Erika', 'avatar': self.DEFAULT_AVATAR
         })
         
+        # New: Trigger a chat refresh to show the new messages
+        if self.refresh_chat_callback:
+            await self.refresh_chat_callback()
+
         # Get context and stream response
         history = self.memory_manager.get_messages(self.current_chat_id) if self.current_chat_id else []
         if len(history) > 20: history = history[-20:]
         context = history + [{'role': 'user', 'content': user_msg}]
-        
+
         full_response = ""
         try:
             async for chunk in self.brain.think_stream(context):
@@ -112,17 +124,20 @@ class ChatController:
                 full_response += chunk
                 # Update the content of the assistant's message in place
                 self.messages[assistant_message_id]['content'] = full_response
+                # Trigger stream update
+                if self.stream_update_callback:
+                    await self.stream_update_callback(full_response)
         except Exception as e:
             self.messages[assistant_message_id]['content'] = f"**Error:** {e}"
         finally:
             self.is_generating = False
             self._stop_flag = False
-            
+
             # Save the completed conversation turn
             if self.current_chat_id is None:
                 self.current_chat_id = self.memory_manager.create_chat(user_msg)
             self.memory_manager.save_turn(self.current_chat_id, user_msg, full_response)
-            
+
             # Trigger a refresh of the sidebar
             if self.refresh_history_callback:
                 await self.refresh_history_callback()

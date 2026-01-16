@@ -2,6 +2,7 @@ from nicegui import ui, app
 from core.settings import SettingsManager
 import httpx
 import asyncio
+import os
 
 class SettingsModal:
     def __init__(self, settings_manager: SettingsManager, on_theme_toggle=None):
@@ -13,8 +14,6 @@ class SettingsModal:
         self.pending_sys = self.settings.sys_config.copy()
         # Cache for Ollama model list
         self._cached_models = None
-        # Pre‑fetch model list in background so the System tab is instant
-        asyncio.create_task(self._prefetch_models())
         
         self.dialog = ui.dialog()
         with self.dialog, ui.card().classes('w-full max-w-[850px] h-[700px] max-h-[90vh] p-0 flex flex-col bg-[#212121] border border-white/10 no-wrap'):
@@ -28,7 +27,7 @@ class SettingsModal:
                 # Left Sidebar (Navigation)
                 with ui.column().classes('w-64 h-full bg-[#171717] p-3 gap-1 border-r border-white/10'):
                     self.nav_btns = {}
-                    
+
                     def nav_button(label, icon, tab):
                         btn = ui.button(label, icon=icon, on_click=lambda: self.show_tab(tab)) \
                             .props('flat align=left') \
@@ -43,7 +42,7 @@ class SettingsModal:
                     nav_button('Tools', 'extension', 'tools')
                     ui.separator().classes('bg-white/10 my-2')
                     nav_button('About', 'info', 'about')
-                    
+
                     ui.space()
                     ui.button('Save', icon='save', on_click=self.save_changes) \
                         .classes('w-full bg-blue-600 hover:bg-blue-700 text-white rounded-md mb-2')
@@ -56,31 +55,33 @@ class SettingsModal:
     def save_changes(self):
         # 1. Save System Settings
         self.settings.save_system_settings(self.pending_sys)
-        
+
         # 2. Save User Settings and Check Theme
         old_theme = self.settings.get_user_setting('theme')
         self.settings.save_user_settings(self.pending_user)
-        
+
         # Toggle theme if changed
         if self.pending_user['theme'] != old_theme and self.on_theme_toggle:
             self.on_theme_toggle()
-            
+
         ui.notify('Settings Saved', type='positive')
         self.dialog.close()
 
-    def open(self):
+    async def open(self):
+        # Prefetch models before opening the dialog
+        await self._prefetch_models()
         self.dialog.open()
 
     def show_tab(self, tab_name):
         self.current_tab = tab_name
-        
+
         # Update styling
         for t, btn in self.nav_btns.items():
             if t == tab_name:
                 btn.classes(remove='text-gray-400 hover:bg-[#2f2f2f]/50', add='bg-[#2f2f2f] text-white')
             else:
                 btn.classes(add='text-gray-400 hover:bg-[#2f2f2f]/50', remove='bg-[#2f2f2f] text-white')
-        
+
         self.content_area.clear()
         with self.content_area:
             if tab_name == 'interface':
@@ -100,12 +101,12 @@ class SettingsModal:
         """Return cached Ollama model list if available, otherwise fetch and cache it."""
         if self._cached_models is not None:
             return self._cached_models
-        
+
         url = self.settings.get_system_setting('ollama_url', 'http://localhost:11434')
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(f"{url}/api/tags", timeout=2)
-            
+
             if resp.status_code == 200:
                 data = resp.json()
                 models = [m['name'] for m in data.get('models', [])]
@@ -123,14 +124,14 @@ class SettingsModal:
     def refresh_path_list(self):
         self.path_list_container.clear()
         paths = self.pending_sys.get('model_paths', [])
-        
+
         with self.path_list_container:
             for i, path in enumerate(paths):
                 with ui.row().classes('w-full items-center gap-2 bg-[#2f2f2f] p-2 rounded-md'):
                     ui.label(path).classes('text-sm text-gray-300 flex-grow break-all')
                     ui.button(icon='remove', on_click=lambda idx=i: self.remove_path(idx)) \
                         .props('flat round color=red dense size=sm')
-            
+
             # Add Button Row
             with ui.row().classes('w-full justify-start mt-2'):
                  ui.button('Add Folder', icon='create_new_folder', on_click=self.add_path_click) \
@@ -152,7 +153,7 @@ class SettingsModal:
 
     def render_interface_tab(self):
         ui.label('Interface Settings').classes('text-2xl font-semibold mb-6')
-        
+
         u_theme = self.pending_user.get('theme', 'dark')
 
         ui.label('Appearance').classes('text-sm font-bold text-gray-500 uppercase mb-2')
@@ -164,13 +165,13 @@ class SettingsModal:
 
     def render_personalization_tab(self):
         ui.label('Personalization').classes('text-2xl font-semibold mb-6')
-        
+
         u_name = self.pending_user.get('username', 'User')
         u_persona = self.pending_user.get('persona', '')
 
         ui.label('Profile').classes('text-sm font-bold text-gray-500 uppercase mb-2')
         ui.input('Nickname', value=u_name, on_change=lambda e: self.pending_user.update({'username': e.value})).classes('w-full mb-4').props('dark outlined')
-        
+
         ui.label('System Persona').classes('text-sm font-bold text-gray-500 uppercase mb-2 mt-4')
         ui.textarea('Custom Instructions', value=u_persona, placeholder='You are a helpful assistant...', on_change=lambda e: self.pending_user.update({'persona': e.value})).classes('w-full h-32').props('dark outlined')
 
@@ -180,7 +181,7 @@ class SettingsModal:
 
     def render_system_tab(self):
         ui.label('System Settings').classes('text-2xl font-semibold mb-6')
-        
+
         # Load Pending Settings
         sys_model = self.pending_sys.get('model', 'llama3')
         sys_url = self.pending_sys.get('ollama_url', 'http://localhost:11434')
@@ -189,8 +190,8 @@ class SettingsModal:
         # Fetch Available Models
         available_models = self._fetch_ollama_models()
         if not available_models:
-             available_models = [sys_model, 'llama3', 'mistral', 'gemma'] 
-        
+             available_models = [sys_model, 'llama3', 'mistral', 'gemma']
+
         if sys_model not in available_models:
             available_models.append(sys_model)
 
@@ -202,7 +203,7 @@ class SettingsModal:
         # 2. Model Locations (Dynamic List)
         ui.label('Model Locations').classes('text-sm font-bold text-gray-500 uppercase mb-2')
         ui.label('Manage folders where Erika looks for GGUF models.').classes('text-xs text-gray-400 mb-2')
-        
+
         path_list_container = ui.column().classes('w-full gap-2 mb-6')
 
         def refresh_paths():
@@ -215,8 +216,8 @@ class SettingsModal:
                         def remove_action(idx=i):
                             self.pending_sys['model_paths'].pop(idx)
                             refresh_paths()
-                        ui.button(icon='remove', on_click=remove_action).props('flat round color=red dense size=sm')
-        
+                        ui.button(icon='remove', on_click=remove_action).props('flat round color=red dense size=sm')        
+
         refresh_paths() # Initial render
 
         # Input for adding a new path
@@ -237,26 +238,26 @@ class SettingsModal:
 
         # 3. Model Selection
         ui.label('Active Model').classes('text-sm font-bold text-gray-500 uppercase mb-2 mt-8')
-        ui.select(available_models, value=sys_model, label='Model Name', 
+        ui.select(available_models, value=sys_model, label='Model Name',
                   on_change=lambda e: self.pending_sys.update({'model': e.value})) \
             .classes('w-full mb-6').props('dark outlined behavior=menu')
-            
+
         # 4. Context Window
         ui.label('Context Length').classes('text-sm font-bold text-gray-500 uppercase mb-1 mt-4')
         ui.label('Token limit for memory and processing.').classes('text-xs text-gray-400 mb-4')
-        
+
         ctx_options = [4096, 8192, 16384, 32768, 65536, 131072]
         ctx_labels = {4096: '4k', 8192: '8k', 16384: '16k', 32768: '32k', 65536: '64k', 131072: '128k'}
-        
-        current_idx = 1 
+
+        current_idx = 1
         if sys_ctx in ctx_options:
             current_idx = ctx_options.index(sys_ctx)
-            
+
         with ui.row().classes('w-full items-center px-2'):
              slider = ui.slider(min=0, max=len(ctx_options)-1, step=1, value=current_idx) \
                 .classes('w-full') \
                 .props('markers snap label')
-             
+
              with ui.row().classes('w-full justify-between text-[10px] text-gray-500 mt-1'):
                  for val in ctx_options:
                      ui.label(ctx_labels.get(val, str(val)))
@@ -264,7 +265,7 @@ class SettingsModal:
         def on_slider_change(e):
             val = ctx_options[int(e.value)]
             self.pending_sys['context_window'] = val
-            
+
         slider.on_value_change(on_slider_change)
 
     def render_tools_tab(self):
@@ -274,5 +275,5 @@ class SettingsModal:
     def render_about_tab(self):
         ui.label('About Erika AI').classes('text-2xl font-semibold mb-6')
         ui.label('Version 1.0.0').classes('text-gray-400 mb-4')
-        ui.markdown('Powered by **Ollama** and **NiceGUI**.').classes('text-gray-300 mb-4')
+        ui.markdown('Powered by **Ollama** and **NiceGUI**.')
         ui.link('View on GitHub', '#').classes('text-blue-400 hover:text-blue-300')
