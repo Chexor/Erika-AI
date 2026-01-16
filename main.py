@@ -45,5 +45,3 @@ if __name__ == '__main__':
     # Browser Mode
     logger.info("🚀 Starting NiceGUI Server...")
     ui.run(native=False, title="Erika AI", reload=False, show=True)
-    
-

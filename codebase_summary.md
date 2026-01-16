@@ -1,61 +1,141 @@
 # Erika AI Codebase Summary
 
-This document provides a comprehensive overview of the Erika AI architecture, designed for reporting to the "Architect" Gem.
+**Version**: 2.0 (MVC Refactor)
+**Date**: Jan 2026
+**Architecture**: Strict MVC / Local-First
 
-## 1. Project Overview
-**Erika** is a local-first, OS-integrated AI assistant. She functions as a central hub for desktop automation, powered by local LLMs and modular agents.
-- **Philosophy**: Privacy-first, OS-native integration, Modular "Hub & Spoke" architecture.
-- **Current Status**: MVP Scaffolding complete with Brain Module connected to Local LLM.
+This document acts as the technical bible for the Erika AI project. It details the architectural decisions, component responsibilities, and data flows of the system.
 
-## 2. Architecture & Tech Stack
+---
 
-| Component | Technology | functionality |
-|:--- |:--- |:--- |
-| **Language** | Python 3.10+ | Core logic and orchestration. |
-| **Interface** | NiceGUI | Web-based native UI (pywebview) for chat. |
-| **System Integration** | pystray | System Tray icon and background persistence. |
-| **Brain / LLM** | OpenAI Client / Adapter | Connects to local inference servers (Ollama/vLLM). |
+## 1. Project Philosophy
+Erika is more than a chatbot; she is an **OS-Native Agentic Hub**.
+*   **Local-First**: Zero data exfiltration. All inference happens on `localhost`.
+*   **OS-Integrated**: Persists in the System Tray, minimizing to background, ready to be summoned.
+*   **Strict Separation**: Identifying that UI libraries change often, we enforce a strict separation between Logic (Controller) and Presentation (View).
 
-## 3. Directory Structure
+---
+
+## 2. High-Level Architecture
+The application follows a **Strict MVC (Model-View-Controller)** pattern, assembled by a Dependency Injection-style entry point.
+
+| Layer | Component | Responsibility | Dependencies |
+| :--- | :--- | :--- | :--- |
+| **Model** | `interface/state.py` | Holds the **Reactive State**. Single Source of Truth. | None |
+| **View** | `interface/components.py` | **Pure Functions**. Renders UI based on Data & Callbacks. | None (Strict) |
+| **Controller** | `interface/controller.py` | **Business Logic**. Manipulates State, calls Internal APIs. | `core.*`, `state` |
+| **Assembler** | `interface/main.py` | **Wiring**. Initializes MVC, injects dependencies, handles Layout. | All of the above |
+| **Backend** | `core/*` | **Infrastructure**. LLM, Memory, Logging, Config. | External Libs |
+
+---
+
+## 3. Component Deep Dive
+
+### A. The Interface Layer (`interface/`)
+
+#### 1. `state.py` (The Model)
+A naive data container that holds the application state. It performs no logic other than basic list appends.
+*   **Key Properties**:
+    *   `messages` (List[Dict]): The live chat history.
+    *   `is_generating` (Bool): Controls UI loading states.
+    *   `sidebar_history` (Dict): Grouped list of past chats.
+    *   `notifications` (List): Queue for toast messages.
+
+#### 2. `components.py` (The View)
+A library of "dumb" UI components. They do not know about the database, the network, or the brain.
+*   **`ChatBubble`**: Renders a message. Takes `on_regenerate`, `on_copy` callbacks.
+*   **`InputBar`**: Renders the text area. Takes `on_send`, `on_stop` callbacks.
+*   **`Sidebar`**: Renders the history list. Takes `on_load_chat`, `on_new_chat`.
+
+#### 3. `controller.py` (The Controller)
+The brains of the operation. It orchestrates the flow of data.
+*   **`handle_send(text)`**:
+    1.  Updates `state` immediately (Optimistic UI).
+    2.  Calls `core.brain.think_stream`.
+    3.  Updates `state` with streaming chunks.
+    4.  Saves result to `core.memory`.
+*   **`shutdown()`**: Ensures graceful cleanup of threads and resources.
+*   **Dependencies**: It is the **ONLY** class allowed to import `core.brain` or `core.memory`.
+
+#### 4. `main.py` (The Assembler)
+The entry point for the UI process.
+*   Initializes `AppState`.
+*   Initializes `ErikaController(state)`.
+*   Defines `ui.refreshable` zones to react to state changes.
+*   **Wiring**: Creates functions like `on_send_click` that bridge the View's events to the Controller's logic.
+
+---
+
+### B. The Core Layer (`core/`)
+
+#### 1. `brain.py` (The Intelligence)
+A **Singleton** orchestrator for the LLM.
+*   **Role**: Manages the connection to the Local LLM (Ollama).
+*   **Status Check**: Verifies LLM health on startup.
+*   **Persona**: Injects the System Prompt defined in `user.json`.
+
+#### 2. `memory.py` (The Storage)
+Handles persistence of chat history.
+*   **Format**: JSON files stored in `erika_home/chats/`.
+*   **Schema**:
+    ```json
+    {
+      "id": "uuid",
+      "title": "Conversation Title",
+      "messages": [ {"role": "user", "content": "..."} ]
+    }
+    ```
+
+#### 3. `logger.py` (The Watchdog)
+Provides robust, centralized logging.
+*   **Destination**: `erika_home/logs/erika_debug.log`.
+*   **Rotation**: Max 5MB, 5 Backups.
+*   **Transformation**: Hooks `sys.excepthook` and `asyncio.loop.set_exception_handler` to catch "silent" crashes.
+
+#### 4. `settings.py` (The Configuration)
+Manages the dual-configuration system.
+*   `user.json`: User preferences (Theme, Name, Personal Custom Instructions).
+*   `system.json`: Technical config (Ollama URL, Model Name, Context Window).
+
+---
+
+## 4. Data Flow Walkthrough: "User Sends a Message"
+
+1.  **User Interaction**: User types "Hello" and clicks Send in `InputBar`.
+2.  **View Event**: `InputBar` fires the `on_send("Hello")` callback provided by `main.py`.
+3.  **Assembler Relay**: `main.py` calls `controller.handle_send("Hello")`.
+4.  **Controller Logic**:
+    *   **Optimistic Update**: Appends "Hello" and a "..." placeholder to `state.messages`.
+    *   **UI Refresh**: `state` change triggers `ui.refreshable` in `main.py`. User sees the message instantly.
+    *   **Inference**: Controller calls `brain.think_stream()`.
+    *   **Streaming**: As chunks arrive, Controller updates the last message in `state`.
+    *   **Live UI**: `main.py` (via a Timer/Hook) pushes the text update to the DOM.
+5.  **Persistence**: Controller calls `memory.save_turn()`.
+6.  **Completion**: Controller sets `state.is_generating = False`. UI updates to show "Ready" state.
+
+---
+
+## 5. Directory Verification
 
 ```text
 Erika-AI/
-├── main.py                 # Entry point (System Tray + UI Launcher)
-├── requirements.txt        # Dependencies (nicegui, pystray, openai, etc.)
-├── core/                   # The "Brain" of the operation
-│   ├── brain.py            # Main orchestration class (Brain)
-│   └── llm/                # LLM Adapter Module
-│       ├── base.py         # Abstract Base Class (LLMProvider)
-│       └── engine.py       # Concrete Implementation (LocalLLMEngine)
-├── interface/              # User Interface
-│   └── ui.py               # NiceGUI Chat Layout and Event Handlers
-├── erika_home/             # Local storage (Memory, Logs - Placeholder)
-└── scripts/                # Utilities
-    └── test_brain.py       # Verification script for LLM connection
+├── launch_erika.bat        # Launcher (Ollama check + Venv + Run)
+├── main.py                 # Application Bootstrap
+├── requirements.txt        # Python Dependencies
+├── core/
+│   ├── brain.py
+│   ├── logger.py
+│   ├── memory.py
+│   └── settings.py
+├── interface/
+│   ├── components.py       # Pure View
+│   ├── controller.py       # Business Logic
+│   ├── main.py             # UI Assembly
+│   ├── settings_ui.py      # Settings Component
+│   ├── state.py            # Reactive Model
+│   └── tray.py             # System Tray
+└── erika_home/             # (Ignored by Git)
+    ├── chats/              # JSON History
+    ├── config/             # User/System Config
+    └── logs/               # Debug Logs
 ```
-
-## 4. Key Components Detail
-
-### Core: `core/brain.py`
-The `Brain` class acts as the central coordinator. It currently initializes the `LocalLLMEngine` and routes user input to the LLM. It maintains the system persona ("You are Erika...").
-
-### LLM Module: `core/llm/`
-Implements the **Adapter Pattern** to decouple the rest of the application from specific LLM providers.
-- `LLMProvider` (ABC): Defines the contract (`generate`, `stream`).
-- `LocalLLMEngine`: Connects to `localhost:11434/v1` (Ollama default) using the `openai` Python client.
-
-### Interface: `interface/ui.py`
-A reactive web UI built with **NiceGUI**.
-- Features a chat container with "You" and "Erika" messages.
-- Calls `core.brain.process_input` (mapped to `Brain.think` in later iterations) to get responses.
-- Runs in "Native" mode (using pywebview) to appear as a desktop application window.
-
-### Entry Point: `main.py`
-- Runs the `pystray` icon in a separate thread.
-- Launches the NiceGUI main thread.
-- Provides context menu options: "Open Erika", "Exit".
-
-## 5. Next Steps for Development
-1. **Memory System**: Implement `erika_home` JSON storage for persistent conversation history.
-2. **Context Awareness**: Add ability to read clipboard or selected text.
-3. **MCP Integration**: Connect to the Model Context Protocol to drive external tools.
