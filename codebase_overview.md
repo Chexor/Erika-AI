@@ -29,6 +29,7 @@ The system is strictly divided into four layers to ensure separation of concerns
     *   **Model (`state.py`):** `dataclasses` only. Holds UI state. No logic.
     *   **View (`components.py`):** Pure functions returning UI elements. No `core` imports.
     *   **Controller (`controller.py`):** Orchestrates logic. Imports `core`, `modules`, and `state`.
+    *   **Tray (`tray.py`):** System Tray integration (pystray).
 
 ### 4. ASSEMBLER (Entry Point)
 *   **File:** `main.py`
@@ -37,6 +38,7 @@ The system is strictly divided into four layers to ensure separation of concerns
     *   Initialize Core.
     *   Initialize State.
     *   Initialize Controller.
+    *   Initialize System Tray.
     *   Launch UI (View).
 *   **Rules:** Code wiring only. No business logic.
 
@@ -44,6 +46,7 @@ The system is strictly divided into four layers to ensure separation of concerns
 
 ```text
 Erika-AI/
+├── assets/               # Static resources (Icons, Logos)
 ├── core/                 # Infrastructure
 │   ├── brain.py
 │   ├── logger.py
@@ -54,7 +57,9 @@ Erika-AI/
 ├── interface/            # MVC Layer
 │   ├── components.py     # View
 │   ├── controller.py     # Controller
-│   └── state.py          # Model
+│   ├── state.py          # Model
+│   └── tray.py           # System Tray
+├── logs/                 # Runtime logs (ignored by git)
 ├── tests/                # Verification Layer
 ├── main.py               # Assembler
 ├── GEMINI.md             # Governance Protocol
