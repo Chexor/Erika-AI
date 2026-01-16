@@ -8,8 +8,28 @@ import sys
 from core.brain import Brain
 from core.settings import SYS_CONF_PATH
 from core.logger import setup_logger
+import logging
+import traceback
 
 logger = setup_logger("Main")
+
+# ------------------- Global Exception & Warning Handling -------------------
+
+def log_unhandled_exception(exc_type, exc_value, tb):
+    """Log unhandled exceptions to our log file."""
+    logger.critical("Unhandled exception", exc_info=(exc_type, exc_value, tb))
+
+# Set the global exception hook
+sys.excepthook = log_unhandled_exception
+
+# Redirect warnings to the logging system
+logging.captureWarnings(True)
+# Also log warnings to the console for visibility during development
+warnings_logger = logging.getLogger('py.warnings')
+warnings_logger.addHandler(logging.StreamHandler())
+
+# ---------------------------------------------------------------------------
+
 
 def create_icon(color="blue"):
     # Try to load custom logo

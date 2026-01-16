@@ -1,9 +1,7 @@
 from nicegui import ui, app
 from core.settings import SettingsManager
-import requests
+import httpx
 import asyncio
-import tkinter as tk
-from tkinter import filedialog
 
 class SettingsModal:
     def __init__(self, settings_manager: SettingsManager, on_theme_toggle=None):
@@ -98,13 +96,16 @@ class SettingsModal:
             elif tab_name == 'about':
                 self.render_about_tab()
 
-    def _fetch_ollama_models(self):
+    async def _fetch_ollama_models(self):
         """Return cached Ollama model list if available, otherwise fetch and cache it."""
         if self._cached_models is not None:
             return self._cached_models
+        
         url = self.settings.get_system_setting('ollama_url', 'http://localhost:11434')
         try:
-            resp = requests.get(f"{url}/api/tags", timeout=2)
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{url}/api/tags", timeout=2)
+            
             if resp.status_code == 200:
                 data = resp.json()
                 models = [m['name'] for m in data.get('models', [])]
@@ -115,9 +116,8 @@ class SettingsModal:
         return []
 
     async def _prefetch_models(self):
-        """Background task to pre‑fetch the model list on startup."""
-        # Trigger a fetch; result will be cached inside _fetch_ollama_models
-        self._fetch_ollama_models()
+        """Background task to pre-fetch the model list on startup."""
+        await self._fetch_ollama_models()
 
 
     def refresh_path_list(self):
@@ -137,45 +137,18 @@ class SettingsModal:
                     .classes('bg-green-600 text-white text-sm px-3 py-1 rounded hover:bg-green-700') \
                     .props('dense')
 
-    def remove_path(self, index):
-        paths = self.pending_sys.get('model_paths', [])
-        if 0 <= index < len(paths):
-            paths.pop(index)
-            self.refresh_path_list()
-
-    async def add_path_click(self):
-        await self._browse_directory()
-
-    async def _browse_directory(self):
-        try:
-            # Use PowerShell to open a folder picker dialog (Windows only, safe for threads)
-            cmd = "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.ShowDialog() | Out-Null; $f.SelectedPath"
-            
-            def run_powershell_dialog():
-                import subprocess
-                # CREATE_NO_WINDOW = 0x08000000 to hide console
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                
-                result = subprocess.run(
-                    ["powershell", "-Command", cmd], 
-                    capture_output=True, 
-                    text=True, 
-                    creationflags=0x08000000
-                )
-                return result.stdout.strip()
-
-            path = await asyncio.to_thread(run_powershell_dialog)
-            
-            if path:
-                # Add to pending settings
-                current_paths = self.pending_sys.get('model_paths', [])
-                if path not in current_paths:
-                    current_paths.append(path)
-                    self.refresh_path_list()
-                    ui.notify(f"Added: {path}")
-        except Exception as e:
-            ui.notify(f"Error browsing: {e}", type='negative')
+    def add_path_from_input(self, text_input):
+        path = text_input.value.strip()
+        if path and os.path.isdir(path):
+            current_paths = self.pending_sys.get('model_paths', [])
+            if path not in current_paths:
+                current_paths.append(path)
+                self.refresh_path_list()
+                text_input.value = ''
+            else:
+                ui.notify('Path already exists.', type='warning')
+        else:
+            ui.notify('Invalid path. Please enter a valid directory.', type='negative')
 
     def render_interface_tab(self):
         ui.label('Interface Settings').classes('text-2xl font-semibold mb-6')
@@ -230,17 +203,46 @@ class SettingsModal:
         ui.label('Model Locations').classes('text-sm font-bold text-gray-500 uppercase mb-2')
         ui.label('Manage folders where Erika looks for GGUF models.').classes('text-xs text-gray-400 mb-2')
         
-        self.path_list_container = ui.column().classes('w-full gap-2 mb-6')
-        self.refresh_path_list()
+        path_list_container = ui.column().classes('w-full gap-2 mb-6')
+
+        def refresh_paths():
+            path_list_container.clear()
+            paths = self.pending_sys.get('model_paths', [])
+            with path_list_container:
+                for i, path in enumerate(paths):
+                    with ui.row().classes('w-full items-center gap-2 bg-[#2f2f2f] p-2 rounded-md'):
+                        ui.label(path).classes('text-sm text-gray-300 flex-grow break-all')
+                        def remove_action(idx=i):
+                            self.pending_sys['model_paths'].pop(idx)
+                            refresh_paths()
+                        ui.button(icon='remove', on_click=remove_action).props('flat round color=red dense size=sm')
+        
+        refresh_paths() # Initial render
+
+        # Input for adding a new path
+        with ui.row().classes('w-full items-center gap-2'):
+            path_input = ui.input(placeholder='Paste new model directory path here...').classes('flex-grow').props('dark outlined dense')
+            def add_action():
+                path = path_input.value.strip()
+                if path and os.path.isdir(path):
+                    if path not in self.pending_sys['model_paths']:
+                        self.pending_sys['model_paths'].append(path)
+                        refresh_paths()
+                        path_input.value = ''
+                    else:
+                        ui.notify('Path already exists.', type='warning')
+                else:
+                    ui.notify('Invalid path. Please enter a valid directory.', type='negative')
+            ui.button('Add', on_click=add_action).props('dense color=positive')
 
         # 3. Model Selection
-        ui.label('Active Model').classes('text-sm font-bold text-gray-500 uppercase mb-2')
+        ui.label('Active Model').classes('text-sm font-bold text-gray-500 uppercase mb-2 mt-8')
         ui.select(available_models, value=sys_model, label='Model Name', 
                   on_change=lambda e: self.pending_sys.update({'model': e.value})) \
             .classes('w-full mb-6').props('dark outlined behavior=menu')
             
         # 4. Context Window
-        ui.label('Context Length').classes('text-sm font-bold text-gray-500 uppercase mb-1')
+        ui.label('Context Length').classes('text-sm font-bold text-gray-500 uppercase mb-1 mt-4')
         ui.label('Token limit for memory and processing.').classes('text-xs text-gray-400 mb-4')
         
         ctx_options = [4096, 8192, 16384, 32768, 65536, 131072]

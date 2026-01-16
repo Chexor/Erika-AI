@@ -3,22 +3,27 @@ from core.erika_vision.engine import ErikaVision
 from core.logger import setup_logger
 from core.settings import SettingsManager
 
-# CONFIG: Default to Ollama. Change model_name if needed.
-ACTIVE_URL = "http://localhost:11434/v1"
-ACTIVE_MODEL = "llama3" 
-
 class Brain:
     def __init__(self):
         self.logger = setup_logger("Brain")
         self.settings_manager = SettingsManager()
-        self.engine = LocalLLMEngine(base_url=ACTIVE_URL, model_name=ACTIVE_MODEL)
+
+        # Retrieve LLM configuration from settings manager, with fallbacks
+        llm_base_url = self.settings_manager.get_system_setting("ollama_url", "http://localhost:11434")
+        # Ensure the URL ends with /v1 for the OpenAI API compatibility
+        if not llm_base_url.endswith("/v1"):
+            llm_base_url += "/v1"
+        
+        llm_model_name = self.settings_manager.get_system_setting("model", "llama3")
+
+        self.engine = LocalLLMEngine(base_url=llm_base_url, model_name=llm_model_name)
         self.vision = ErikaVision() # Initialize Vision
         # Default persona fallback, but we primarily use settings now
         self.default_persona = (
             "You are Erika, a highly capable local AI assistant. "
             "You are helpful, concise, and run entirely on the user's hardware."
         )
-        self.logger.info(f"Initialized Brain with model: {ACTIVE_MODEL}")
+        self.logger.info(f"Initialized Brain with model: {llm_model_name}")
 
     def _get_system_prompt(self):
         return self.settings_manager.get_user_setting('persona', self.default_persona)

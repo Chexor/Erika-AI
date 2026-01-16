@@ -70,5 +70,6 @@ class LocalLLMEngine(LLMProvider):
             sync_client = OpenAI(base_url=self.client.base_url, api_key="erika-local")
             sync_client.models.list()
             return True
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: Connection check failed with exception: {e}") # Added debug print
             return False
