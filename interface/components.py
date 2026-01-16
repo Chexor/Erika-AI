@@ -43,8 +43,8 @@ def Sidebar(
 def HeroSection():
     """Centered logo for empty state."""
     with ui.column().classes('w-full h-full justify-center items-center'):
-        # Placeholder for 🦙 logo or robot
-        ui.icon('smart_toy', size='4rem', color='gray').classes('opacity-20 mb-4')
+        # Custom Avatar
+        ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-32 opacity-20 mb-4 filter grayscale')
         ui.label('How can I help you today?').classes('text-2xl text-white font-semibold opacity-50')
 
 def ChatArea(messages: List[Dict[str, Any]]):
@@ -60,7 +60,7 @@ def ChatArea(messages: List[Dict[str, Any]]):
                         ui.markdown(content)
             else:
                  with ui.row().classes('w-full justify-start items-start gap-4'):
-                    ui.icon('smart_toy', size='md', color='white').classes('mt-2 p-1 bg-gray-800 rounded-full')
+                    ui.image('/assets/Erika-AI_logo2_transparant.png').classes('w-8 h-8 rounded-full bg-gray-800 p-1 mt-2')
                     with ui.column().classes('flex-1'):
                         ui.markdown(content).classes('text-gray-200')
 
@@ -79,11 +79,20 @@ def InputPill(
         
         # Input Text
         text_input = ui.input(placeholder='Message Erika...').props('borderless input-class="text-white"').classes('flex-1 bg-transparent')
-        text_input.on('keydown.enter', lambda: on_send(text_input.value))
+        
+        async def send_and_clear():
+            val = text_input.value
+            if val:
+                text_input.set_value('')
+                result = on_send(val)
+                if result is not None and hasattr(result, '__await__'):
+                    await result
+
+        text_input.on('keydown.enter', send_and_clear)
         
         # Model Selector (Small)
         if models:
             ui.select(models, value=models[0]).props('borderless dense options-dense behavior=menu').classes('w-32 text-xs text-gray-400')
             
         # Send Button
-        ui.button(on_click=lambda: on_send(text_input.value), icon='arrow_upward').classes('bg-white text-black rounded-full shadow-md')
+        ui.button(on_click=send_and_clear, icon='arrow_upward').classes('bg-white text-black rounded-full shadow-md')

@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import warnings
 from logging.handlers import RotatingFileHandler
 
 # Constants
@@ -42,6 +43,55 @@ def setup_logger(name: str) -> logging.Logger:
     logger.addHandler(console_handler)
 
     return logger
+
+class StderrWrapper:
+    """Redirects stderr to logger while keeping original stderr."""
+    def __init__(self, original_stderr):
+        self.original_stderr = original_stderr
+        self.logger = logging.getLogger("STDERR")
+
+    def write(self, message):
+        if message.strip():
+            self.logger.warning(message.rstrip())
+        self.original_stderr.write(message)
+
+    def flush(self):
+        self.original_stderr.flush()
+
+def setup_global_capture():
+    """Redirects warnings and external logs to our file."""
+    # 1. Capture Python Warnings
+    logging.captureWarnings(True)
+    warnings_logger = logging.getLogger("py.warnings")
+    
+    # 2. Capture Stderr
+    if not isinstance(sys.stderr, StderrWrapper):
+        sys.stderr = StderrWrapper(sys.stderr)
+    
+    # 3. Attach file handler to Root and Libs
+    file_path = os.path.join(LOG_DIR, LOG_FILE)
+    formatter = logging.Formatter(FORMAT_STR)
+    handler = RotatingFileHandler(file_path, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
+    handler.setFormatter(formatter)
+    
+    # Attach to root logger
+    root_log = logging.getLogger()
+    if not any(isinstance(h, RotatingFileHandler) for h in root_log.handlers):
+        root_log.addHandler(handler)
+        root_log.setLevel(logging.DEBUG)
+
+    # Propagate libs
+    for lib in ["uvicorn", "uvicorn.error", "uvicorn.access", "nicegui", "watchfiles"]:
+        logging.getLogger(lib).propagate = True
+
+    # Silence noisy libraries
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
+    logging.getLogger("watchfiles.main").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("websockets").setLevel(logging.WARNING)
+
+
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     """Global exception hook to log unhandled crashes."""

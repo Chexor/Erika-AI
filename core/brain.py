@@ -36,9 +36,8 @@ class Brain:
             return []
         try:
             response = ollama.list()
-            # Handle different versions of ollama lib structure if needed,
-            # but assuming standard: {'models': [{'name': ...}]}
-            return [m['name'] for m in response.get('models', [])]
+            # Support both 'name' (older) and 'model' (newer) keys
+            return [m.get('name') or m.get('model') for m in response.get('models', [])]
         except Exception as e:
             logger.error(f"Failed to list models: {e}")
             return []
