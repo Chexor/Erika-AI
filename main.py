@@ -93,8 +93,19 @@ def main_page():
                     on_tool_toggle=lambda: ui.notify("Upload/Tools")
                 )
 
+from interface.tray import ErikaTray
+
 # 5. Launch
 if __name__ in {"__main__", "__mp_main__"}:
     setup_global_capture()
     logger.info("Starting Erika-AI Interface...")
+    
+    # Initialize Tray (needs to access controller? For now, we instantiate a dummy or hook later)
+    # Ideally, tray needs access to the main controller or app state if it wants to control it.
+    # But main_page() creates controller lazily per-client.
+    # We will pass None or a global shutdown hook for now.
+    
+    tray = ErikaTray(controller=None) 
+    tray.run()
+    
     ui.run(title="Erika AI", dark=True, reload=False)
