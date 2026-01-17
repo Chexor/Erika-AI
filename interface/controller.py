@@ -6,6 +6,7 @@ from engine.modules.token_counter import TokenCounter
 from tools.speech_engine import SpeechEngine
 import asyncio
 import uuid
+import datetime
 
 logger = setup_engine_logger("INTERFACE.Controller")
 
@@ -221,3 +222,41 @@ class Controller:
                 "messages": self.chat_history
             }
             self.memory.save_chat(self.current_chat_id, data)
+
+    async def get_grouped_history(self):
+        """Retrieves and groups chat history."""
+        chats = self.memory.list_chats()
+        groups = {
+            "Today": [],
+            "Yesterday": [],
+            "This Week": [],
+            "Older": []
+        }
+        
+        now = datetime.datetime.now()
+        today = now.date()
+        yesterday = today - datetime.timedelta(days=1)
+        last_week = today - datetime.timedelta(days=7)
+        
+        for chat in chats:
+            created_at_str = chat.get("created_at")
+            if not created_at_str:
+                groups["Older"].append(chat)
+                continue
+                
+            try:
+                dt = datetime.datetime.fromisoformat(created_at_str)
+                date = dt.date()
+                
+                if date == today:
+                    groups["Today"].append(chat)
+                elif date == yesterday:
+                    groups["Yesterday"].append(chat)
+                elif date > last_week:
+                    groups["This Week"].append(chat)
+                else:
+                    groups["Older"].append(chat)
+            except ValueError:
+                groups["Older"].append(chat)
+                
+        return groups

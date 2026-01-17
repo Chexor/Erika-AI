@@ -25,19 +25,54 @@ class Memory:
             "messages": []
         }
 
-    def save_chat(self, chat_id: str, data: Dict[str, Any]):
-        """Saves chat data to file. Deletes file if messages are empty."""
-        file_path = os.path.join(self.base_path, f"{chat_id}.json")
+    def _find_chat_path(self, chat_id: str) -> Optional[str]:
+        """Recursively searches for a chat file."""
+        # 1. Check root (legacy/flat)
+        root_path = os.path.join(self.base_path, f"{chat_id}.json")
+        if os.path.exists(root_path): return root_path
         
+        # 2. Check subfolders
+        for root, dirs, files in os.walk(self.base_path):
+            if f"{chat_id}.json" in files:
+                return os.path.join(root, f"{chat_id}.json")
+        return None
+
+    def save_chat(self, chat_id: str, data: Dict[str, Any]):
+        """Saves chat data to file in date-based subfolder."""
+        # Determine folder DD-MM-YYYY
+        created_at = data.get('created_at')
+        if created_at:
+            try:
+                dt = datetime.datetime.fromisoformat(created_at)
+                date_str = dt.strftime('%d-%m-%Y')
+            except ValueError:
+                date_str = datetime.datetime.now().strftime('%d-%m-%Y')
+        else:
+            date_str = datetime.datetime.now().strftime('%d-%m-%Y')
+            
+        folder_path = os.path.join(self.base_path, date_str)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+            
+        file_path = os.path.join(folder_path, f"{chat_id}.json")
+
         # Check for empty conversation
         if not data.get("messages"):
-            if os.path.exists(file_path):
+            # Try to find existing file to delete (could be in old location)
+            existing_path = self._find_chat_path(chat_id)
+            if existing_path and os.path.exists(existing_path):
                 try:
-                    os.remove(file_path)
+                    os.remove(existing_path)
                     logger.info(f"Deleted empty chat: {chat_id}")
                 except Exception as e:
                     logger.warning(f"Failed to clean up empty chat {chat_id}: {e}")
             return
+            
+        # Clean up legacy location if moving (and distinct from new location)
+        legacy_path = os.path.join(self.base_path, f"{chat_id}.json")
+        if os.path.exists(legacy_path) and os.path.abspath(legacy_path) != os.path.abspath(file_path):
+             try: os.remove(legacy_path)
+             except: pass
 
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -47,23 +82,23 @@ class Memory:
 
     def delete_chat(self, chat_id: str) -> bool:
         """Deletes a chat file by ID."""
-        file_path = os.path.join(self.base_path, f"{chat_id}.json")
+        file_path = self._find_chat_path(chat_id)
+        if not file_path:
+             logger.warning(f"Attempted to delete non-existent chat: {chat_id}")
+             return False
+             
         try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                logger.info(f"Deleted chat: {chat_id}")
-                return True
-            else:
-                logger.warning(f"Attempted to delete non-existent chat: {chat_id}")
-                return False
+            os.remove(file_path)
+            logger.info(f"Deleted chat: {chat_id}")
+            return True
         except Exception as e:
             logger.error(f"Failed to delete chat {chat_id}: {e}")
             return False
 
     def get_chat(self, chat_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves chat data."""
-        file_path = os.path.join(self.base_path, f"{chat_id}.json")
-        if not os.path.exists(file_path):
+        file_path = self._find_chat_path(chat_id)
+        if not file_path:
             return None
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -73,16 +108,22 @@ class Memory:
             return None
 
     def list_chats(self) -> List[Dict[str, Any]]:
-        """Lists all chats (metadata only)."""
+        """Lists all chats recursively."""
         chats = []
-        for filename in os.listdir(self.base_path):
-            if filename.endswith(".json"):
-                chat_id = filename[:-5]
-                data = self.get_chat(chat_id)
-                if data:
-                    chats.append({
-                        "id": data.get("id"),
-                        "created_at": data.get("created_at"),
-                        "preview": (data.get("messages", []) or [{"content": "Empty"}])[0].get("content")[:50]
-                    })
+        for root, dirs, files in os.walk(self.base_path):
+            for filename in files:
+                if filename.endswith(".json"):
+                    try:
+                        file_path = os.path.join(root, filename)
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            
+                        chats.append({
+                            "id": data.get("id"),
+                            "created_at": data.get("created_at"),
+                            "preview": (data.get("messages", []) or [{"content": "Empty"}])[0].get("content")[:50]
+                        })
+                    except Exception as e:
+                        logger.error(f"Failed to list chat {filename}: {e}")
+                        
         return sorted(chats, key=lambda x: x.get("created_at", ""), reverse=True)

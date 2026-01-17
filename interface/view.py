@@ -298,19 +298,42 @@ def build_ui(controller: Controller):
         chat_scroll.scroll_to(percent=1.0)
         
         # Refresh Sidebar
-        chats = await controller.load_history()
+        grouped_chats = await controller.get_grouped_history()
         scroll_list.clear()
+        
         with scroll_list:
-            if not chats:
-                ui.label('No history yet').classes('text-xs text-gray-600 p-2 italic')
-            else:
+            has_history = False
+            for group_name, chats in grouped_chats.items():
+                if not chats: continue
+                has_history = True
+                
+                # Group Header
+                ui.label(group_name).classes('text-[10px] font-bold text-gray-600 uppercase tracking-widest mt-4 mb-2 pl-2')
+                
                 for chat in chats:
+                     # Calculate time hint
+                     preview = chat.get('preview', 'New Chat')
+                     
                      with ui.row().classes('sidebar-btn w-full p-2 mb-1 cursor-pointer items-center gap-3').on('click', lambda c=chat['id']: controller.load_chat_session(c)):
-                        ui.icon('chat_bubble_outline', size='xs').classes('text-gray-600')
-                        ui.label(chat.get('preview', 'New Chat')).classes('text-sm truncate flex-1 text-gray-400')
+                        
+                        # Active Indicator
+                        is_active = controller.current_chat_id == chat['id']
+                        icon = 'chat_bubble' if is_active else 'chat_bubble_outline'
+                        icon_color = 'text-blue-400' if is_active else 'text-gray-600'
+                        bg_cls = 'bg-white/10' if is_active else ''
+                        
+                        # Apply active styling to row
+                        # (NiceGUI rows don't easily accept dynamic classes update without rebuild, 
+                        # but we are rebuilding logic here anyway)
+                        
+                        ui.icon(icon, size='xs').classes(f'{icon_color}')
+                        ui.label(preview).classes(f'text-sm truncate flex-1 { "text-white" if is_active else "text-gray-400" }')
                         
                         with ui.context_menu():
                             ui.menu_item('Delete', on_click=lambda c=chat['id']: confirm_delete(c)).classes('text-red-400')
+                            
+            if not has_history:
+                 ui.label('No history yet').classes('text-xs text-gray-600 p-2 italic')
 
 
     controller.bind_view(refresh_view)
