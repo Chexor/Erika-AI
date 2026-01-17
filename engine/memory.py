@@ -13,24 +13,32 @@ class Memory:
         if not os.path.exists(self.base_path):
             os.makedirs(self.base_path)
             
-    def create_chat(self) -> str:
-        """Creates a new chat session and returns ID."""
+    def create_chat(self) -> Dict[str, Any]:
+        """Creates a new chat session metadata (does not save to disk)."""
         chat_id = str(uuid.uuid4())
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         
-        data = {
+        logger.info(f"Created new chat session: {chat_id}")
+        return {
             "id": chat_id,
             "created_at": timestamp,
             "messages": []
         }
-        
-        self.save_chat(chat_id, data)
-        logger.info(f"Created new chat: {chat_id}")
-        return chat_id
 
     def save_chat(self, chat_id: str, data: Dict[str, Any]):
-        """Saves chat data to file."""
+        """Saves chat data to file. Deletes file if messages are empty."""
         file_path = os.path.join(self.base_path, f"{chat_id}.json")
+        
+        # Check for empty conversation
+        if not data.get("messages"):
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Deleted empty chat: {chat_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up empty chat {chat_id}: {e}")
+            return
+
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)

@@ -73,16 +73,44 @@ SETTINGS_CONFIG = [
                         "type": "buttons",
                         "label": "Tone / Vibe",
                         "options": ['Professional', 'Friendly', 'Sassy', 'Minimal']
-                    },
-                    {
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "Voice",
+        "icon": "record_voice_over",
+        "label": "Voice",
+        "sections": [
+             {
+                 "title": "Speech Synthesis",
+                 "items": [
+                     {
                         "type": "select",
                         "label": "Voice Model",
                         "options": ['alba', 'marius', 'javert', 'jean', 'fantine', 'cosette', 'eponine', 'azelma'],
                         "default": "azelma",
                         "change_handler": "set_tts_voice"
+                    },
+                    {
+                        "type": "slider", 
+                        "label": "Volume", 
+                        "min": 0.0, 
+                        "max": 1.0, 
+                        "step": 0.1, 
+                        "default": 1.0,
+                        "change_handler": "set_tts_volume"
+                    },
+                    {
+                        "type": "toggle",
+                        "label": "Auto-Read Responses",
+                        "sub": "Automatically speak responses when generated",
+                        "default": False,
+                        "change_handler": "set_tts_autoplay"
                     }
-                ]
-            }
+                 ]
+             }
         ]
     },
     {
@@ -180,7 +208,7 @@ def render_select(item, controller=None):
                  if method:
                      method(e.value)
         
-        ui.select(options=item['options'], value=item['default'], on_change=on_change).props('outlined dense options-dense behavior=menu input-class=text-white').classes('w-full bg-slate-800/50 rounded-lg text-white')
+        ui.select(options=item['options'], value=item['default'], on_change=on_change).props('outlined dense options-dense behavior=menu input-class=text-white input-style="color: white !important" label-color="gray-4" color="blue-4" popup-content-class="bg-slate-900 text-white"').classes('w-full bg-slate-800/50 rounded-lg text-white')
 
 def render_step_slider(item, controller=None):
     with ui.column().classes('w-full gap-1'):
@@ -226,7 +254,6 @@ ITEM_RENDERERS = {
     'buttons': render_buttons,
     'model_info': render_model_info,
     'metrics': render_metrics,
-    'metrics': render_metrics,
     'step_slider': render_step_slider,
     'select': render_select,
 }
@@ -247,7 +274,10 @@ def build_settings_modal(controller):
                 tabs = ui.tabs().classes('w-full flex-col items-stretch h-full gap-2').props('vertical')
                 with tabs:
                     for tab_cfg in SETTINGS_CONFIG:
-                        ui.tab(tab_cfg['id'], label=tab_cfg['label'], icon=tab_cfg['icon']).classes('justify-start px-4 py-3 rounded-lg text-gray-400 data-[state=active]:bg-white/10 data-[state=active]:text-white transition-all').props("no-caps flat")
+                        with ui.tab(tab_cfg['id'], label="").classes('justify-start px-4 py-3 rounded-lg text-gray-400 data-[state=active]:bg-white/10 data-[state=active]:text-white transition-all w-full h-auto min-h-0').props("no-caps flat content-class=w-full"):
+                            with ui.row().classes('w-full items-center gap-3 justify-start'):
+                                ui.icon(tab_cfg['icon'], size='xs')
+                                ui.label(tab_cfg['label']).classes('text-sm font-medium')
 
             # --- RIGHT CONTENT ---
             with ui.column().classes('flex-1 h-full p-8 bg-transparent'):

@@ -154,7 +154,14 @@ def build_ui(controller: Controller):
                     # Footer Actions (Outside Bubble)
                     if not is_user:
                         with ui.row().classes('ml-2 opacity-60 hover:opacity-100 transition-opacity'):
-                             ui.button(icon='volume_up', on_click=lambda m=msg['content']: controller.play_response(m)).props('flat round dense size=xs').classes('text-gray-500 hover:text-blue-400')
+                             # Dynamic Icon State
+                             msg_id = msg.get('id')
+                             is_playing = controller.speaking_msg_id == msg_id
+                             
+                             icon_name = 'stop_circle' if is_playing else 'volume_up'
+                             icon_color = 'text-red-400' if is_playing else 'text-gray-500 hover:text-blue-400'
+                             
+                             ui.button(icon=icon_name, on_click=lambda m=msg_id, t=msg['content']: controller.toggle_tts(m, t)).props('flat round dense size=xs').classes(f'{icon_color} transition-colors')
                 
                 # --- USER AVATAR (Right) ---
                 if is_user:
