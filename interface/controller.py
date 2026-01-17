@@ -1,6 +1,8 @@
 from engine.brain import Brain
 from engine.memory import Memory
 from engine.logger import setup_engine_logger
+from engine.modules.system_monitor import SystemMonitor
+from engine.modules.token_counter import TokenCounter
 import asyncio
 
 logger = setup_engine_logger("INTERFACE.Controller")
@@ -12,6 +14,32 @@ class Controller:
         self.current_chat_id = None
         self.chat_history = []  # In-memory messages for UI
         self.refresh_ui_callback = None
+        
+        # System Monitor
+        self.system_monitor = SystemMonitor()
+        self.system_monitor.start()
+
+        # Token Counter
+        self.token_counter = TokenCounter()
+        self.current_token_count = 0
+        
+        # Settings State
+        self.settings = {
+            'context_window': 8192 # Default 8k
+        }
+        
+    def get_system_health(self):
+        """Returns the latest system stats."""
+        stats = self.system_monitor.get_system_health()
+        if stats:
+             stats['tokens_curr'] = self.current_token_count
+             stats['tokens_max'] = self.settings.get('context_window', 8192)
+        return stats
+    
+    def set_context_window(self, tokens: int):
+        """Updates the context window setting."""
+        self.settings['context_window'] = tokens
+        logger.info(f"Controller: Context Window updated to {tokens} tokens")
         
     def bind_view(self, refresh_callback):
         """Binds the view refresh callback."""
@@ -47,8 +75,12 @@ class Controller:
         if data:
             self.current_chat_id = chat_id
             self.chat_history = data.get("messages", [])
+            
+            # Recount tokens
+            self.current_token_count = self.token_counter.count_messages(self.chat_history)
+            logger.info(f"Controller: Loaded chat {chat_id} (Tokens: {self.current_token_count})")
+            
             await self._safe_refresh()
-            logger.info(f"Controller: Loaded chat {chat_id}")
 
     async def handle_user_input(self, content: str):
         """Processes user input."""
@@ -58,6 +90,12 @@ class Controller:
         # 1. Add User Message
         user_msg = {"role": "user", "content": content}
         self.chat_history.append(user_msg)
+        
+        # Log Prompt Tokens
+        prompt_tokens = self.token_counter.count_messages(self.chat_history)
+        self.current_token_count = prompt_tokens
+        logger.info(f"Controller: User Input Received. Current Context Tokens: {prompt_tokens}")
+
         await self._safe_refresh()
             
         # 2. Persist
@@ -85,7 +123,13 @@ class Controller:
         
         # 4. Persist Final
         self._persist()
-        logger.info("Controller: Response complete.")
+        
+        # Log Completion Tokens
+        final_tokens = self.token_counter.count_messages(self.chat_history)
+        completion_tokens = final_tokens - prompt_tokens
+        self.current_token_count = final_tokens
+        
+        logger.info(f"Controller: Response complete. Completion: {completion_tokens} toks. Total: {final_tokens} toks.")
 
     def _persist(self):
         """Saves current state to memory."""

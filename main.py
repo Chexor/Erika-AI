@@ -29,12 +29,17 @@ UI_PORT = 3333
 
 def cleanup():
     """Cleanup handler."""
-    global lock, shutting_down, window_process
+    global lock, shutting_down, window_process, controller
     if shutting_down:
         return
     shutting_down = True
     
     logger.info("Engine: Cleanup initiated.")
+    
+    # Stop System Monitor
+    if controller and hasattr(controller, 'system_monitor'):
+        controller.system_monitor.stop()
+
     try:
         if tray and tray.icon:
             tray.icon.stop()
@@ -168,6 +173,7 @@ def main():
     memory = Memory()
     brain = Brain()
     controller = Controller(brain, memory)
+    logger.info("Engine: System Monitor Active.")
     
     # 3. Build UI
     app.add_static_files('/assets', 'assets')
