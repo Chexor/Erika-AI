@@ -73,6 +73,13 @@ SETTINGS_CONFIG = [
                         "type": "buttons",
                         "label": "Tone / Vibe",
                         "options": ['Professional', 'Friendly', 'Sassy', 'Minimal']
+                    },
+                    {
+                        "type": "select",
+                        "label": "Voice Model",
+                        "options": ['alba', 'marius', 'javert', 'jean', 'fantine', 'cosette', 'eponine', 'azelma'],
+                        "default": "azelma",
+                        "change_handler": "set_tts_voice"
                     }
                 ]
             }
@@ -163,6 +170,18 @@ def render_metrics(item):
     stat_bar('RAM', 0.45, 'orange')
     stat_bar('VRAM', 0.82, 'red')
 
+def render_select(item, controller=None):
+    with ui.column().classes('w-full gap-1'):
+        ui.label(item['label']).classes('text-sm text-gray-400')
+        
+        def on_change(e):
+             if controller and 'change_handler' in item:
+                 method = getattr(controller, item['change_handler'], None)
+                 if method:
+                     method(e.value)
+        
+        ui.select(options=item['options'], value=item['default'], on_change=on_change).props('outlined dense options-dense behavior=menu input-class=text-white').classes('w-full bg-slate-800/50 rounded-lg text-white')
+
 def render_step_slider(item, controller=None):
     with ui.column().classes('w-full gap-1'):
         ui.label(item['label']).classes('text-sm text-gray-400')
@@ -207,7 +226,9 @@ ITEM_RENDERERS = {
     'buttons': render_buttons,
     'model_info': render_model_info,
     'metrics': render_metrics,
+    'metrics': render_metrics,
     'step_slider': render_step_slider,
+    'select': render_select,
 }
 
 # --- BUILDER ---
@@ -244,7 +265,7 @@ def build_settings_modal(controller):
                                         for item in section['items']:
                                             renderer = ITEM_RENDERERS.get(item['type'])
                                             if renderer:
-                                                if item['type'] == 'step_slider':
+                                                if item['type'] in ['step_slider', 'select']:
                                                     renderer(item, controller)
                                                 else:
                                                     renderer(item)

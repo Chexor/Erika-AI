@@ -37,6 +37,21 @@ class Memory:
         except Exception as e:
             logger.error(f"Failed to save chat {chat_id}: {e}")
 
+    def delete_chat(self, chat_id: str) -> bool:
+        """Deletes a chat file by ID."""
+        file_path = os.path.join(self.base_path, f"{chat_id}.json")
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"Deleted chat: {chat_id}")
+                return True
+            else:
+                logger.warning(f"Attempted to delete non-existent chat: {chat_id}")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to delete chat {chat_id}: {e}")
+            return False
+
     def get_chat(self, chat_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves chat data."""
         file_path = os.path.join(self.base_path, f"{chat_id}.json")

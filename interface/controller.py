@@ -3,6 +3,7 @@ from engine.memory import Memory
 from engine.logger import setup_engine_logger
 from engine.modules.system_monitor import SystemMonitor
 from engine.modules.token_counter import TokenCounter
+from tools.speech_engine import SpeechEngine
 import asyncio
 
 logger = setup_engine_logger("INTERFACE.Controller")
@@ -23,9 +24,13 @@ class Controller:
         self.token_counter = TokenCounter()
         self.current_token_count = 0
         
+        # Speech Engine
+        self.speech_engine = SpeechEngine()
+        
         # Settings State
         self.settings = {
-            'context_window': 8192 # Default 8k
+            'context_window': 8192,
+            'tts_voice': 'azelma'
         }
         
     def get_system_health(self):
@@ -40,6 +45,17 @@ class Controller:
         """Updates the context window setting."""
         self.settings['context_window'] = tokens
         logger.info(f"Controller: Context Window updated to {tokens} tokens")
+
+    def set_tts_voice(self, voice: str):
+        """Updates the TTS voice."""
+        self.settings['tts_voice'] = voice
+        self.speech_engine.set_voice(voice)
+        logger.info(f"Controller: TTS Voice updated to {voice}")
+
+    def play_response(self, text: str):
+        """Triggers TTS playback."""
+        logger.info("Controller: TTS Play requested.")
+        self.speech_engine.speak(text)
         
     def bind_view(self, refresh_callback):
         """Binds the view refresh callback."""
@@ -81,6 +97,18 @@ class Controller:
             logger.info(f"Controller: Loaded chat {chat_id} (Tokens: {self.current_token_count})")
             
             await self._safe_refresh()
+
+    async def request_delete_chat(self, chat_id: str):
+        """Deletes a chat and updates state."""
+        success = self.memory.delete_chat(chat_id)
+        if success:
+            logger.info(f"Controller: Chat {chat_id} deleted successfully.")
+            if self.current_chat_id == chat_id:
+                self.new_chat()
+            # Triggers full UI rebuild including sidebar
+            await self._safe_refresh()
+        else:
+            logger.warning(f"Controller: Failed to delete chat {chat_id}")
 
     async def handle_user_input(self, content: str):
         """Processes user input."""

@@ -154,7 +154,7 @@ def build_ui(controller: Controller):
                     # Footer Actions (Outside Bubble)
                     if not is_user:
                         with ui.row().classes('ml-2 opacity-60 hover:opacity-100 transition-opacity'):
-                             ui.button(icon='volume_up', on_click=lambda: ui.notify('Reading aloud...')).props('flat round dense size=xs').classes('text-gray-500 hover:text-blue-400')
+                             ui.button(icon='volume_up', on_click=lambda m=msg['content']: controller.play_response(m)).props('flat round dense size=xs').classes('text-gray-500 hover:text-blue-400')
                 
                 # --- USER AVATAR (Right) ---
                 if is_user:
@@ -273,6 +273,18 @@ def build_ui(controller: Controller):
 
     # --- LOGIC & BINDINGS ---
     
+    async def confirm_delete(chat_id):
+        with ui.dialog() as dialog, ui.card().classes('bg-slate-900 border border-white/10'):
+             ui.label('Delete this conversation?').classes('text-white font-bold')
+             ui.label('This action cannot be undone.').classes('text-gray-400 text-sm')
+             with ui.row().classes('w-full justify-end mt-4'):
+                 ui.button('Cancel', on_click=dialog.close).props('flat text-color=white')
+                 async def do_del():
+                     dialog.close()
+                     await controller.request_delete_chat(chat_id)
+                 ui.button('Delete', color='red', on_click=do_del).props('flat')
+        dialog.open()
+
     async def refresh_view():
         """Refreshes the UI state."""
         render_chat_history.refresh()
@@ -289,6 +301,9 @@ def build_ui(controller: Controller):
                      with ui.row().classes('sidebar-btn w-full p-2 mb-1 cursor-pointer items-center gap-3').on('click', lambda c=chat['id']: controller.load_chat_session(c)):
                         ui.icon('chat_bubble_outline', size='xs').classes('text-gray-600')
                         ui.label(chat.get('preview', 'New Chat')).classes('text-sm truncate flex-1 text-gray-400')
+                        
+                        with ui.context_menu():
+                            ui.menu_item('Delete', on_click=lambda c=chat['id']: confirm_delete(c)).classes('text-red-400')
 
 
     controller.bind_view(refresh_view)
