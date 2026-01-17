@@ -89,11 +89,16 @@ def build_ui(controller: Controller):
             .input-field {
                 background: transparent;
                 border: none;
-                color: white;
                 outline: none;
                 font-size: 0.95rem;
             }
-            .input-field::placeholder { color: #64748b; }
+            .input-field .q-field__native {
+                color: var(--text-primary);
+            }
+            .input-field .q-field__native::placeholder { 
+                color: var(--text-secondary); 
+                opacity: 1; /* Ensure firefox matches */
+            }
             
             .send-btn {
                 transition: transform 0.1s;
@@ -155,6 +160,101 @@ def build_ui(controller: Controller):
                          ui.icon('person', size='sm').classes('w-9 h-9 text-gray-400 bg-white/5 rounded-full p-2')
 
 
+    # --- SETTINGS MODAL ---
+    with ui.dialog() as settings_dialog:
+        with ui.card().classes('glass-panel w-[800px] h-[600px] p-0 flex flex-row overflow-hidden border border-white/10 rounded-xl'):
+            
+            # Left Nav
+            with ui.column().classes('w-64 h-full bg-black/20 p-6 flex-shrink-0 border-r border-white/5 gap-2'):
+                ui.label('Settings').classes('text-xl font-bold text-gray-100 mb-6 tracking-tight')
+                
+                tabs = ui.tabs().classes('w-full flex-col items-stretch h-full gap-2').props('vertical')
+                with tabs:
+                    def tab_style(name, icon):
+                        t = ui.tab(name, label=name, icon=icon).classes('justify-start px-4 py-3 rounded-lg text-gray-400 data-[state=active]:bg-white/10 data-[state=active]:text-white transition-all')
+                        # NiceGUI tabs styling is a bit tricky, relying on standard props
+                        t.props("no-caps flat")
+                        return t
+                        
+                    t_gen = tab_style('General', 'tune')
+                    t_pers = tab_style('Personalization', 'palette')
+                    t_sys = tab_style('System', 'memory')
+
+            # Right Content
+            with ui.column().classes('flex-1 h-full p-8 bg-transparent'):
+                with ui.tab_panels(tabs, value='General').classes('w-full h-full bg-transparent text-gray-200 animated fade-in'):
+                    
+                    # --- GENERAL (UI & Window) ---
+                    with ui.tab_panel('General').classes('p-0 flex flex-col gap-6'):
+                        ui.label('Window Preferences').classes('text-lg font-semibold mb-2 text-white')
+                        
+                        def toggle_row(label, sub, val=True):
+                            with ui.row().classes('w-full justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5'):
+                                with ui.column().classes('gap-0'):
+                                    ui.label(label).classes('text-base font-medium text-gray-200')
+                                    ui.label(sub).classes('text-xs text-gray-500')
+                                ui.switch(value=val).props('color=blue ignore-theme')
+
+                        toggle_row('Run on Startup', 'Launch Erika automatically when system starts')
+                        toggle_row('Always on Top', 'Keep the interaction window above other apps', False)
+                        
+                        ui.separator().classes('bg-white/10 my-2')
+                        
+                        ui.label('Appearance').classes('text-lg font-semibold mb-2 text-white')
+                        
+                        with ui.column().classes('gap-4'):
+                            ui.label('Accent Color').classes('text-sm text-gray-400')
+                            with ui.row().classes('gap-3'):
+                                for col in ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b']:
+                                    ui.button().classes('w-8 h-8 rounded-full border border-white/20').style(f'background-color: {col}')
+                        
+                        ui.label('Font Size').classes('text-sm text-gray-400')
+                        ui.slider(min=12, max=20, value=14).props('label-always color=blue').classes('w-full max-w-xs')
+
+
+                    # --- PERSONALIZATION (Erika) ---
+                    with ui.tab_panel('Personalization').classes('p-0 flex flex-col gap-6'):
+                        ui.label('Erika\'s Persona').classes('text-lg font-semibold mb-2 text-white')
+                        
+                        with ui.column().classes('w-full gap-2'):
+                            ui.label('System Prompt').classes('text-sm text-gray-400')
+                            ui.textarea(placeholder="You are Erika, a helpful AI assistant...", value="You are Erika, a sentient AI assistant.").classes('w-full input-field bg-white/5 rounded-xl p-2 border border-white/10').props('input-class="text-white" borderless rows=4')
+
+                        with ui.column().classes('w-full gap-2'):
+                             ui.label('Tone / Vibe').classes('text-sm text-gray-400')
+                             with ui.row().classes('gap-2'):
+                                 for vibe in ['Professional', 'Friendly', 'Sassy', 'Minimal']:
+                                     ui.button(vibe).classes('px-4 py-1 text-xs bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-colors')
+
+
+                    # --- SYSTEM (Engine) ---
+                    with ui.tab_panel('System').classes('p-0 flex flex-col gap-6'):
+                        ui.label('Engine Settings').classes('text-lg font-semibold mb-2 text-white')
+                        
+                        # Model Info
+                        with ui.item_label().classes('bg-white/5 p-4 rounded-xl border border-white/5 w-full'):
+                            ui.label('Active Model').classes('text-xs text-gray-500 uppercase tracking-wider mb-1')
+                            ui.row().classes('items-center justify-between w-full')
+                            with ui.row().classes('items-center gap-2'):
+                                ui.icon('smart_toy', size='sm').classes('text-blue-400')
+                                ui.label('Erika-beta-14b (Qwen)').classes('text-lg font-medium')
+                            ui.button('Change', on_click=lambda: ui.notify('Model switching coming soon!')).classes('text-xs bg-white/10')
+                        
+                        # Resources Mock
+                        with ui.column().classes('w-full gap-2 mt-4'):
+                             ui.label('Real-time Metrics').classes('text-sm text-gray-400')
+                             
+                             def stat_bar(label, val, col):
+                                 with ui.row().classes('w-full items-center gap-4'):
+                                     ui.label(label).classes('w-16 text-xs font-mono text-gray-500')
+                                     ui.linear_progress(val, show_value=False).props(f'color={col} track-color=grey-9').classes('flex-1 rounded-full h-2')
+                                     ui.label(f'{int(val*100)}%').classes('w-8 text-xs text-right text-gray-400')
+                                     
+                             stat_bar('CPU', 0.12, 'green')
+                             stat_bar('RAM', 0.45, 'orange')
+                             stat_bar('VRAM', 0.82, 'red')
+
+
     # --- LAYOUT ---
     
     with ui.row().classes('w-full h-screen no-wrap gap-0'):
@@ -173,7 +273,7 @@ def build_ui(controller: Controller):
             scroll_list = ui.scroll_area().classes('flex-1 w-full -mx-2 px-2')
             
             # User Account / Settings Footnote
-            with ui.row().classes('w-full border-t border-white/5 pt-4 mt-auto items-center gap-3 cursor-pointer sidebar-btn p-2 rounded-lg'):
+            with ui.row().classes('w-full border-t border-white/5 pt-4 mt-auto items-center gap-3 cursor-pointer sidebar-btn p-2 rounded-lg').on('click', settings_dialog.open):
                 ui.avatar('U', color='grey-800', text_color='white').classes('w-8 h-8 text-xs font-bold')
                 with ui.column().classes('gap-0'):
                     ui.label('User').classes('text-sm font-medium text-gray-200')
