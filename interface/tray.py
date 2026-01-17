@@ -9,8 +9,9 @@ from core.logger import setup_logger
 logger = setup_logger("INTERFACE.Tray")
 
 class ErikaTray:
-    def __init__(self, controller):
+    def __init__(self, controller=None, shutdown_callback=None):
         self.controller = controller
+        self.shutdown_callback = shutdown_callback
         self.icon = None
         self.thread = None
         
@@ -40,14 +41,19 @@ class ErikaTray:
 
     def on_quit(self, icon, item):
         logger.info("Tray: Quit requested")
+        if self.shutdown_callback:
+            logger.info("Tray: Triggering shutdown callback...")
+            self.shutdown_callback()
+        else:
+             logger.warning("Tray: No shutdown callback registered!")
+             
         if self.icon:
             self.icon.stop()
         
-        # Cleanup Controller if needed
-        # self.controller.shutdown()
-        
-        logger.info("Tray: Exiting process...")
-        os._exit(0) # Force exit
+    def stop(self):
+        """Stops the tray icon."""
+        if self.icon:
+             self.icon.stop()
 
     def run(self):
         """Runs the tray icon in a separate thread."""

@@ -3,3 +3,4 @@ ollama
 requests
 pystray
 pillow
+pywebview

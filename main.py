@@ -1,4 +1,5 @@
 from nicegui import ui, app
+from typing import Optional
 
 # Architecture Imports
 from interface.state import AppState
@@ -27,7 +28,71 @@ def force_silence_logs():
 
     logger.info("Enforced log silencing.")
 
+from core.singleton import SingletonLock
+import sys
+
+# 5. Global State Holders (for lifecycle access)
+tray: Optional['ErikaTray'] = None
+active_controllers: list[ErikaController] = []
+singleton_lock = SingletonLock()
+
+async def startup():
+    """Application startup hook."""
+    # 0. Gatekeeper: Singleton Lock
+    if not singleton_lock.acquire():
+        logger.error("Erika is already running. Exiting.")
+        # Ensure we don't start the UI or Tray
+        # If ui.run is already passed, we need to kill the process
+        print("Erika is already running. Please close the existing instance.")
+        app.shutdown() 
+        sys.exit(0)
+    
+    logger.info("Initializing Core Services...")
+    
+    # Initialize Core Managers explicitly if needed, but Controller handles it.
+    # We could pre-warm models here.
+    
+    # Initialize Tray
+    global tray
+    # We need a way to stop the app from the tray.
+    # Since ui.run() blocks, we can't easily pass 'app.shutdown'.
+    # But checking docs, app.shutdown() is available.
+    def shutdown_app():
+        logger.info("Shutdown requested via Tray.")
+        app.shutdown() 
+
+    tray = ErikaTray(shutdown_callback=shutdown_app)
+    tray.run()
+
+async def shutdown():
+    """Application shutdown hook."""
+    logger.info("Graceful shutdown initiated...")
+    
+    # Release Lock
+    try:
+        singleton_lock.release()
+    except Exception as e:
+        logger.error(f"Error releasing singleton lock: {e}")
+
+    # Stop Tray
+    global tray
+    if tray:
+        tray.stop()
+        logger.info("Tray stopped.")
+        
+    # Cleanup Controllers
+    for c in active_controllers:
+        try:
+            c.cleanup()
+        except Exception as e:
+            logger.error(f"Error cleaning up controller: {e}")
+            
+    logger.info("Shutdown complete.")
+
 app.on_startup(force_silence_logs)
+app.on_startup(startup)
+app.on_shutdown(shutdown)
+
 app.add_static_files('/assets', 'assets')
 
 @ui.page('/')
@@ -37,7 +102,9 @@ def main_page():
     ui.query('body').classes('bg-[#212121] text-white p-0 m-0') 
     ui.query('.q-page').classes('flex flex-col h-screen w-full p-0 m-0 overflow-hidden') # FORCE no padding, no scroll on page root
     
+    # Init App & Track Controller
     state, controller = init_app()
+    active_controllers.append(controller)
 
     # 3. Define UI Refresh Logic
     async def update_ui():
@@ -100,12 +167,14 @@ if __name__ in {"__main__", "__mp_main__"}:
     setup_global_capture()
     logger.info("Starting Erika-AI Interface...")
     
-    # Initialize Tray (needs to access controller? For now, we instantiate a dummy or hook later)
-    # Ideally, tray needs access to the main controller or app state if it wants to control it.
-    # But main_page() creates controller lazily per-client.
-    # We will pass None or a global shutdown hook for now.
-    
-    tray = ErikaTray(controller=None) 
-    tray.run()
-    
-    ui.run(title="Erika AI", dark=True, reload=False)
+    # Note: native=True requires pywebview. If missing, NiceGUI might warn or fail gracefully.
+    # We use a try-block for safety if we wanted, but ui.run doesn't throw easily.
+    # We enable native mode as requested.
+    ui.run(
+        title="Erika AI",
+        dark=True,
+        reload=False,
+        native=True,
+        window_size=(1200, 800),
+        frameless=False
+    )

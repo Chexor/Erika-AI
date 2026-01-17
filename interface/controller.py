@@ -15,10 +15,10 @@ class ErikaController:
     - Handles user actions and updates state.
     """
 
-    def __init__(self, state: AppState):
+    def __init__(self, state: AppState, settings_manager: Optional[SettingsManager] = None, memory_manager: Optional[MemoryManager] = None):
         self.state = state
-        self.settings = SettingsManager()
-        self.memory = MemoryManager(self.settings)
+        self.settings = settings_manager if settings_manager else SettingsManager()
+        self.memory = memory_manager if memory_manager else MemoryManager(self.settings)
         self.brain = Brain(self.settings)
         
         # Callback to trigger UI refresh (dependency injection by Assembler ideally)
@@ -26,6 +26,14 @@ class ErikaController:
         
         # Initialize
         self._load_initial_data()
+
+    def cleanup(self):
+        """Clean up resources before shutdown."""
+        logger.info("Controller: Cleanup initiated.")
+        # Cancel any active generation tasks here if we track them
+        # For now, we just log. 
+        # Future: self.brain.cancel_generation()
+        pass
 
     def _load_initial_data(self):
         # Load last chat or settings?
