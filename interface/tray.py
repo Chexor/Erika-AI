@@ -9,9 +9,11 @@ from engine.logger import setup_engine_logger
 logger = setup_engine_logger("INTERFACE.Tray")
 
 class ErikaTray:
-    def __init__(self, shutdown_callback, on_show_callback=None):
+    def __init__(self, shutdown_callback, on_show_callback=None, on_restart_callback=None, on_restart_agent_callback=None):
         self.shutdown_callback = shutdown_callback
         self.on_show_callback = on_show_callback
+        self.on_restart_callback = on_restart_callback
+        self.on_restart_agent_callback = on_restart_agent_callback
         self.icon = None
         
         # Load Icon
@@ -20,6 +22,8 @@ class ErikaTray:
         # Build Menu
         self.menu = pystray.Menu(
             item('Show Erika', self.on_show, default=True),
+            item('Restart Window', self.on_restart),
+            item('Restart Agent', self.on_restart_agent),
             item('Exit', self.on_exit)
         )
         
@@ -43,6 +47,18 @@ class ErikaTray:
         logger.info("Tray: User requested UI (Show Erika).")
         if self.on_show_callback:
             self.on_show_callback()
+
+    def on_restart(self, icon, item):
+        """Handler for 'Restart UI'."""
+        logger.info("Tray: User requested UI Restart.")
+        if self.on_restart_callback:
+            self.on_restart_callback()
+
+    def on_restart_agent(self, icon, item):
+        """Handler for 'Restart Agent'."""
+        logger.info("Tray: User requested Agent Restart.")
+        if self.on_restart_agent_callback:
+            self.on_restart_agent_callback()
         
     def on_exit(self, icon, item):
         """Handler for 'Exit'."""

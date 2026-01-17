@@ -83,7 +83,58 @@ def spawn_window():
     except Exception as e:
         logger.error(f"Engine: Failed to spawn window: {e}")
 
-def start_tray_thread(shutdown_cb):
+def restart_window():
+    """Restarts the window process."""
+    global window_process
+    logger.info("Engine: Restarting UI Window...")
+    
+    if window_process:
+        try:
+            window_process.terminate()
+            # Give it a moment to die gracefully if needed, though terminate is usually swift
+            try:
+                window_process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                window_process.kill()
+        except Exception as e:
+            logger.error(f"Engine: Error killing window: {e}")
+        window_process = None
+        
+    spawn_window()
+
+def restart_agent():
+    """Restarts the entire agent process."""
+    global lock, tray, window_process
+    logger.info("Engine: Restarting Agent (Full Process)...")
+    
+    # 1. Kill Window
+    if window_process:
+        try:
+            window_process.terminate()
+        except: 
+            pass
+            
+    # 2. Stop Tray (Important to remove icon)
+    if tray and tray.icon:
+        try:
+            tray.icon.stop()
+        except:
+            pass
+
+    # 3. Release Lock
+    if lock:
+        try:
+            lock.release()
+            logger.info("Engine: Lock released for restart.")
+        except Exception as e:
+            logger.error(f"Engine: Error releasing lock: {e}")
+
+    # 4. Restart Process
+    # os.execl replaces the current process with a new one
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
+
+def start_tray_thread(shutdown_cb, restart_cb, restart_agent_cb):
     """Starts the tray icon in a separate thread."""
     global tray
     
@@ -91,7 +142,12 @@ def start_tray_thread(shutdown_cb):
     def on_show_request():
         spawn_window()
 
-    tray = ErikaTray(shutdown_callback=shutdown_cb, on_show_callback=on_show_request)
+    tray = ErikaTray(
+        shutdown_callback=shutdown_cb, 
+        on_show_callback=on_show_request,
+        on_restart_callback=restart_cb,
+        on_restart_agent_callback=restart_agent_cb
+    )
     tray.run()
 
 def main():
@@ -114,6 +170,7 @@ def main():
     controller = Controller(brain, memory)
     
     # 3. Build UI
+    app.add_static_files('/assets', 'assets')
     @ui.page('/')
     def main_page():
         build_ui(controller)
@@ -124,14 +181,17 @@ def main():
              asyncio.create_task(controller.load_history())
 
     # 4. Start Tray in Background Thread
-    # Pass cleanup as shutdown callback. 
+    # Pass cleanup as shutdown callback and restart_window as restart callback.
     # NOTE: nicegui app.shutdown only stops the server. We want FULL process cleanup.
     # So tray exit -> cleanup() -> sys.exit().
-    t = threading.Thread(target=start_tray_thread, args=(cleanup,), daemon=True)
+    t = threading.Thread(target=start_tray_thread, args=(cleanup, restart_window, restart_agent), daemon=True)
     t.start()
     
     # Register NiceGUI shutdown hook to cleanup if server stops naturally
     app.on_shutdown(cleanup)
+    
+    # 5. Auto-Launch UI on Startup
+    app.on_startup(spawn_window)
 
     # 6. Run Server using Uvicorn (Blocking)
     logger.info(f"Engine: Starting Server at port {UI_PORT}...")

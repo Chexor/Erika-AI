@@ -16,7 +16,7 @@ def main():
 
     # Create Window
     # confirm_close=False -> Just close. Process dies. Engine lives safely.
-    webview.create_window(args.title, args.url, width=400, height=800, resizable=True)
+    webview.create_window(args.title, args.url, width=1680, height=1120, resizable=True)
     
     # Start Loop
     # gui='mshtml' or 'edgechromium' or 'cef'. Standard is fine.

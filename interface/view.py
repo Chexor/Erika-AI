@@ -1,71 +1,252 @@
 from nicegui import ui
+import asyncio
 from interface.controller import Controller
 
 def build_ui(controller: Controller):
-    """Builds the main UI layout."""
+    """
+    Builds the main UI layout with a Premium Glassmorphism Aesthetic.
+    "Make it a masterpiece."
+    """
     
-    # Theme & Style
+    # --- STYLING (THEME) ---
+    # Colors: Deep charcoal/black backgrounds, subtle borders, backdrop blurs.
+    # Accent: #3B82F6 (Blue) or #8B5CF6 (Purple) for user interactions.
+    
     ui.add_head_html("""
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
         <style>
-            body { background-color: #0f172a; color: #e2e8f0; }
-            .erika-gradient { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
-            .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-            .chat-bubble-user { background-color: #2563eb; color: white; border-radius: 12px 12px 0 12px; }
-            .chat-bubble-ai { background-color: #1e293b; color: #e2e8f0; border-radius: 12px 12px 12px 0; border: 1px solid #334155; }
+            :root {
+                --bg-deep: #0f1115;       /* Very dark background */
+                --bg-surface: #181a20;    /* Sidebar / Panels */
+                --glass-border: rgba(255, 255, 255, 0.08);
+                --glass-bg: rgba(25, 27, 32, 0.6);
+                --accent-primary: #3b82f6;
+                --text-primary: #e2e8f0;
+                --text-secondary: #94a3b8;
+            }
+
+            body {
+                background-color: var(--bg-deep);
+                color: var(--text-primary);
+                font-family: 'Inter', sans-serif;
+                overflow: hidden;
+                margin: 0;
+            }
+            
+            /* Custom Scrollbar */
+            ::-webkit-scrollbar { width: 6px; }
+            ::-webkit-scrollbar-track { background: transparent; }
+            ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+            ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+            /* Utility Classes */
+            .glass-panel {
+                background: var(--glass-bg);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+                border-right: 1px solid var(--glass-border);
+            }
+            
+            .glass-pill {
+                background: rgba(30, 32, 38, 0.7);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid var(--glass-border);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            }
+            
+            .fade-in { animation: fadeIn 0.3s ease-in-out; }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            
+            /* Message Bubbles */
+            .msg-bubble-user {
+                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                color: white;
+                border-radius: 18px 4px 18px 18px;
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+            }
+            .msg-bubble-ai {
+                background: rgba(40, 44, 52, 0.8);
+                border: 1px solid var(--glass-border);
+                color: #e2e8f0;
+                border-radius: 4px 18px 18px 18px;
+            }
+
+            /* Buttons & Inputs */
+            .sidebar-btn {
+                transition: all 0.2s ease;
+                border-radius: 8px;
+                color: var(--text-secondary);
+            }
+            .sidebar-btn:hover {
+                background: rgba(255, 255, 255, 0.05);
+                color: var(--text-primary);
+            }
+            
+            .input-field {
+                background: transparent;
+                border: none;
+                color: white;
+                outline: none;
+                font-size: 0.95rem;
+            }
+            .input-field::placeholder { color: #64748b; }
+            
+            .send-btn {
+                transition: transform 0.1s;
+                background: white;
+                color: black;
+            }
+            .send-btn:hover { transform: scale(1.05); }
+            .send-btn:active { transform: scale(0.95); }
         </style>
     """)
-    
-    # Layout
-    with ui.row().classes('w-full h-screen no-wrap gap-0'):
-        # Sidebar
-        with ui.column().classes('w-64 h-fullerika-gradient border-r border-slate-700 p-4 gap-2'):
-            ui.label('ERIKA AI').classes('text-xl font-bold tracking-wider text-blue-400 mb-4')
-            
-            ui.button('New Chat', on_click=controller.new_chat).classes('w-full mb-4 bg-blue-600 hover:bg-blue-500')
-            
-            with ui.scroll_area().classes('w-full flex-grow'):
-                history_list = ui.column().classes('w-full gap-1')
-        
-        # Main Chat Area
-        with ui.column().classes('flex-grow h-full relative bg-slate-900'):
-            # Messages
-            with ui.scroll_area().classes('w-full flex-grow p-4') as scroll_container:
-                messages_container = ui.column().classes('w-full max-w-3xl mx-auto gap-4 pb-24')
-            
-            # Floating Input Pill
-            with ui.row().classes('absolute bottom-6 left-1/2 transform -translate-x-1/2 w-full max-w-2xl'):
-                with ui.row().classes('w-full glass rounded-full p-2 items-center gap-2 shadow-2xl'):
-                    input_field = ui.input(placeholder='Message Erika...').classes('flex-grow px-4 border-none focus:outline-none bg-transparent text-white').props('dark')
-                    
-                    async def send():
-                        text = input_field.value
-                        if not text: return
-                        input_field.value = ''
-                        await controller.handle_user_input(text)
-                    
-                    input_field.on('keydown.enter', send)
-                    ui.button(icon='arrow_up', on_click=send).props('round flat color=blue').classes('mr-1')
 
-    # Refresh Logic
-    async def refresh():
-        messages_container.clear()
-        with messages_container:
-            for msg in controller.chat_history:
-                align = 'items-end self-end' if msg['role'] == 'user' else 'items-start self-start'
-                bubble = 'chat-bubble-user' if msg['role'] == 'user' else 'chat-bubble-ai'
-                with ui.column().classes(f'w-full {align}'):
-                    ui.markdown(msg['content']).classes(f'p-3 {bubble} max-w-xl text-sm leading-relaxed')
+    # --- COMPONENTS ---
+    
+    @ui.refreshable
+    def render_chat_history():
+        """Renders the chat stream with high-fidelity avatars and bubbles."""
         
-        # Reload history list (simplified for now)
-        # Note: In real app, we'd optimize this to not reload every message
-        chats = await controller.load_history()
-        history_list.clear()
-        with history_list:
-            for chat in chats:
-                with ui.row().classes('w-full p-2 hover:bg-slate-800 rounded cursor-pointer group items-center').on('click', lambda c=chat['id']: controller.load_chat_session(c)):
-                    ui.label(chat['preview'] or 'New Chat').classes('text-xs text-slate-400 truncate flex-grow group-hover:text-blue-300')
+        # 1. Empty State - Hero
+        if not controller.chat_history:
+            with ui.column().classes('w-full h-full items-center justify-center pb-24 fade-in'):
+                # Big Logo
+                ui.image('/assets/Erika-AI_logo2_transparent.png').classes('w-32 h-32 object-contain opacity-90 mb-6 drop-shadow-2xl')
+                ui.label('How can I help you today?').classes('text-2xl font-light text-gray-400')
+            return
+
+        # 2. Chat List
+        for msg in controller.chat_history:
+            is_user = msg['role'] == 'user'
+            
+            # Row Layout
+            # User: Right Aligned | AI: Left Aligned
+            align = 'justify-end' if is_user else 'justify-start'
+            
+            with ui.row().classes(f'w-full max-w-4xl mx-auto mb-8 gap-4 px-4 {align} fade-in'):
+                
+                # --- AI AVATAR (Left) ---
+                if not is_user:
+                    with ui.column().classes('items-end justify-start'):
+                         ui.image('/assets/Erika-AI_logo2_transparent.png').classes('w-10 h-10 rounded-full object-contain bg-black/20 p-1 border border-white/5')
+
+                # --- MESSAGE BUBBLE ---
+                width_cls = 'max-w-[75%]' # Limit width
+                bubble_cls = 'msg-bubble-user p-4' if is_user else 'msg-bubble-ai p-5'
+                
+                with ui.column().classes(f'{width_cls} {bubble_cls}'):
+                    # AI Name Label (Optional, maybe inside bubble or above?)
+                    # For now, cleaner to just have content.
                     
-    controller.bind_view(refresh)
-    # Initial load
-    # ui.timer(0.1, lambda: asyncio.create_task(controller.load_history()), once=True)
-    # Actually wait for startup
+                    if is_user:
+                         ui.label(msg['content']).classes('text-base leading-relaxed whitespace-pre-wrap')
+                    else:
+                        # Markdown for AI
+                        # We use typography class to style headings/code blocks efficiently
+                        ui.markdown(msg['content']).classes('text-base leading-relaxed w-full prose text-slate-300 prose-invert prose-p:my-1 prose-headings:text-slate-100 prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10')
+                
+                # --- USER AVATAR (Right) ---
+                if is_user:
+                     with ui.column().classes('items-end justify-start'):
+                         ui.icon('person', size='sm').classes('w-9 h-9 text-gray-400 bg-white/5 rounded-full p-2')
+
+
+    # --- LAYOUT ---
+    
+    with ui.row().classes('w-full h-screen no-wrap gap-0'):
+        
+        # 1. Sidebar (Glassy)
+        with ui.column().classes('w-[280px] h-full glass-panel flex flex-col p-4 flex-shrink-0 z-20'):
+            
+            # Header / New Chat
+            with ui.button(on_click=controller.new_chat).classes('sidebar-btn w-full flex items-center justify-start px-3 py-3 mb-6 unstyled'):
+                ui.icon('add', size='xs').classes('mr-3')
+                ui.label('New Chat').classes('font-medium text-sm')
+                
+            ui.label('History').classes('text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2')
+            
+            # Scrollable History
+            scroll_list = ui.scroll_area().classes('flex-1 w-full -mx-2 px-2')
+            
+            # User Account / Settings Footnote
+            with ui.row().classes('w-full border-t border-white/5 pt-4 mt-auto items-center gap-3 cursor-pointer sidebar-btn p-2 rounded-lg'):
+                ui.avatar('U', color='grey-800', text_color='white').classes('w-8 h-8 text-xs font-bold')
+                with ui.column().classes('gap-0'):
+                    ui.label('User').classes('text-sm font-medium text-gray-200')
+                    ui.label('Pro Plan').classes('text-[10px] text-gray-500')
+                ui.icon('settings', size='xs').classes('ml-auto text-gray-500')
+
+
+        # 2. Main Content Area
+        with ui.column().classes('flex-1 h-full relative flex flex-col items-center bg-gradient-to-b from-[#0f1115] to-[#13161c]'):
+            
+            # Top Bar (Model Branding)
+            with ui.row().classes('w-full p-4 flex justify-between items-center z-10'):
+                ui.label('Erika AI').classes('text-lg font-semibold text-gray-200 tracking-tight opacity-50 hover:opacity-100 transition-opacity cursor-default')
+                # Optional: Model Selector
+                with ui.button().classes('rounded-full bg-white/5 px-4 py-1.5 text-xs text-gray-400 hover:text-white transition-colors unstyled flex items-center gap-2'):
+                    ui.label('Erika-beta')
+                    ui.icon('expand_more', size='xs')
+
+            # Chat Stream (Scroll Area)
+            with ui.scroll_area().classes('w-full flex-1 p-0 pb-40') as chat_scroll:
+                 # Container for messages
+                 with ui.column().classes('w-full h-full pt-4'):
+                    render_chat_history()
+            
+            # 3. Input Region (Floating Glass Pill)
+            # Positioned absolute at bottom center
+            with ui.row().classes('absolute bottom-10 w-full max-w-3xl px-6 justify-center z-30'):
+                with ui.row().classes('glass-pill w-full rounded-[2rem] p-2 pl-6 items-center flex-nowrap gap-4'):
+                    
+                    # Tool Accessories (Plus Button)
+                    with ui.button().classes('rounded-full text-gray-400 hover:text-white hover:bg-white/10 w-8 h-8 flex items-center justify-center transition-colors unstyled'):
+                        ui.icon('add', size='sm')
+
+                    # Text Input
+                    text_input = ui.input(placeholder='Message Erika...').classes('flex-grow input-field').props('borderless autocomplete=off')
+                    
+                    # Right Actions
+                    with ui.row().classes('items-center gap-2 pr-1'):
+                        # Voice/Mic (Visual only for now)
+                        # ui.icon('mic', size='xs').classes('text-gray-500 hover:text-white cursor-pointer transition-colors p-2')
+                        
+                        # Send Button
+                        async def send():
+                            val = text_input.value
+                            if not val: return
+                            text_input.value = ''
+                            await controller.handle_user_input(val)
+                            
+                        with ui.button(on_click=send).classes('send-btn rounded-full w-10 h-10 flex items-center justify-center shadow-lg unstyled'):
+                             ui.icon('arrow_upward', size='xs')
+                        
+                        text_input.on('keydown.enter', send)
+
+    # --- LOGIC & BINDINGS ---
+    
+    async def refresh_view():
+        """Refreshes the UI state."""
+        render_chat_history.refresh()
+        chat_scroll.scroll_to(percent=1.0)
+        
+        # Refresh Sidebar
+        chats = await controller.load_history()
+        scroll_list.clear()
+        with scroll_list:
+            if not chats:
+                ui.label('No history yet').classes('text-xs text-gray-600 p-2 italic')
+            else:
+                for chat in chats:
+                     with ui.row().classes('sidebar-btn w-full p-2 mb-1 cursor-pointer items-center gap-3').on('click', lambda c=chat['id']: controller.load_chat_session(c)):
+                        ui.icon('chat_bubble_outline', size='xs').classes('text-gray-600')
+                        ui.label(chat.get('preview', 'New Chat')).classes('text-sm truncate flex-1 text-gray-400')
+
+
+    controller.bind_view(refresh_view)
+    ui.timer(0.1, refresh_view, once=True)
+

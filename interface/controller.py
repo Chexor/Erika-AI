@@ -17,12 +17,24 @@ class Controller:
         """Binds the view refresh callback."""
         self.refresh_ui_callback = refresh_callback
 
+    async def _safe_refresh(self):
+        """Safely awaits the refresh callback."""
+        if self.refresh_ui_callback:
+            if asyncio.iscoroutinefunction(self.refresh_ui_callback):
+                await self.refresh_ui_callback()
+            else:
+                self.refresh_ui_callback()
+
     def new_chat(self):
         """Starts a new chat."""
         self.current_chat_id = self.memory.create_chat()
         self.chat_history = []
         if self.refresh_ui_callback:
-            self.refresh_ui_callback()
+             # Schedule it since new_chat is sync
+             if asyncio.iscoroutinefunction(self.refresh_ui_callback):
+                 asyncio.create_task(self.refresh_ui_callback())
+             else:
+                 self.refresh_ui_callback()
         logger.info(f"Controller: New chat started {self.current_chat_id}")
 
     async def load_history(self):
@@ -35,8 +47,7 @@ class Controller:
         if data:
             self.current_chat_id = chat_id
             self.chat_history = data.get("messages", [])
-            if self.refresh_ui_callback:
-                self.refresh_ui_callback()
+            await self._safe_refresh()
             logger.info(f"Controller: Loaded chat {chat_id}")
 
     async def handle_user_input(self, content: str):
@@ -47,8 +58,7 @@ class Controller:
         # 1. Add User Message
         user_msg = {"role": "user", "content": content}
         self.chat_history.append(user_msg)
-        if self.refresh_ui_callback:
-            self.refresh_ui_callback()
+        await self._safe_refresh()
             
         # 2. Persist
         self._persist()
@@ -61,17 +71,15 @@ class Controller:
         # Stream response
         full_response = ""
         async for chunk in self.brain.generate_response(model="llama3", messages=self.chat_history[:-1]):
-            if "content" in chunk: # Ollama raw response format might differ?
-                # brain.py wrapper yields chunk directly.
-                # Standard Ollama AsyncClient returns object with 'message' -> 'content' or streaming dict?
-                # Wrapper `yield chunk` from `await client.chat(..., stream=True)`
-                # chunk is usually a dict like {'message': {'content': 't'}, 'done': False}
-                content_bit = chunk.get('message', {}).get('content', '')
+            # Ollama chunk format: {'message': {'role': 'assistant', 'content': '...'}, 'done': False}
+            if "message" in chunk:
+                content_bit = chunk['message'].get('content', '')
                 full_response += content_bit
                 assistant_msg['content'] = full_response
+                
                 if self.refresh_ui_callback:
-                    # Throttle updates? NiceGUI handles reasonable frequency.
-                    self.refresh_ui_callback()
+                     await self._safe_refresh()
+            
             elif "error" in chunk:
                  assistant_msg['content'] = f"Error: {chunk['error']}"
         
