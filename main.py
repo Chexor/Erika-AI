@@ -1,180 +1,148 @@
-from nicegui import ui, app
-from typing import Optional
-
-# Architecture Imports
-from interface.state import AppState
-from interface.controller import ErikaController
-from interface.components import Sidebar, HeroSection, ChatArea, InputPill
-from core.logger import setup_logger, setup_global_capture
-
-logger = setup_logger("ASSEMBLER.Main")
-
-def init_app():
-    # 1. Initialize Core & State
-    state = AppState()
-    controller = ErikaController(state)
-    
-    return state, controller
-
-def force_silence_logs():
-    import logging
-    # Force silence again after NiceGUI/Uvicorn startup
-    logging.getLogger("watchfiles").setLevel(logging.WARNING)
-    logging.getLogger("watchfiles.main").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logger.info("Enforced log silencing.")
-
-    logger.info("Enforced log silencing.")
-
-from core.singleton import SingletonLock
+import asyncio
+import threading
 import sys
+import atexit
+import subprocess
+import os
+from nicegui import ui, app
 
-# 5. Global State Holders (for lifecycle access)
-tray: Optional['ErikaTray'] = None
-active_controllers: list[ErikaController] = []
-singleton_lock = SingletonLock()
+from engine.logger import setup_engine_logger
+from engine.singleton import WindowsSingleton
+from engine.brain import Brain
+from engine.memory import Memory
+from interface.tray import ErikaTray
+from interface.controller import Controller
+from interface.view import build_ui
 
-async def startup():
-    """Application startup hook."""
-    # 0. Gatekeeper: Singleton Lock
-    if not singleton_lock.acquire():
-        logger.error("Erika is already running. Exiting.")
-        # Ensure we don't start the UI or Tray
-        # If ui.run is already passed, we need to kill the process
-        print("Erika is already running. Please close the existing instance.")
-        app.shutdown() 
-        sys.exit(0)
+# Setup Global Logger
+logger = setup_engine_logger("ENGINE")
+
+# Global State
+lock = None
+tray = None
+brain = None
+memory = None
+controller = None
+shutting_down = False
+window_process = None
+UI_PORT = 3333
+
+def cleanup():
+    """Cleanup handler."""
+    global lock, shutting_down, window_process
+    if shutting_down:
+        return
+    shutting_down = True
     
-    logger.info("Initializing Core Services...")
+    logger.info("Engine: Cleanup initiated.")
+    try:
+        if tray and tray.icon:
+            tray.icon.stop()
+    except Exception:
+        pass
     
-    # Initialize Core Managers explicitly if needed, but Controller handles it.
-    # We could pre-warm models here.
+    # Kill window process if active
+    if window_process:
+        try:
+            window_process.terminate()
+            logger.info("Engine: Window process terminated.")
+        except Exception:
+            pass
+
+    if lock:
+        try:
+            lock.release()
+            logger.info("Engine: Lock released.")
+        except Exception as e:
+            logger.error(f"Error releasing lock: {e}")
+            
+    logger.info("Engine: Graceful Shutdown.")
+    # Force exit to kill any hanging threads and avoid SystemExit exception in pystray
+    os._exit(0)
+
+def spawn_window():
+    """Spawns the detached window client."""
+    global window_process
     
-    # Initialize Tray
+    # Check if already running
+    if window_process and window_process.poll() is None:
+        logger.info("Engine: Window already active.")
+        return
+
+    logger.info("Engine: Spawning UI Window...")
+    script_path = os.path.join(os.path.dirname(__file__), 'interface', 'window_client.py')
+    url = f"http://localhost:{UI_PORT}"
+    
+    # Use same python interpreter
+    python_exe = sys.executable
+    
+    try:
+        # Popen is non-blocking
+        window_process = subprocess.Popen([python_exe, script_path, "--url", url, "--title", "Erika AI"])
+        logger.info(f"Engine: Window spawned (PID: {window_process.pid})")
+    except Exception as e:
+        logger.error(f"Engine: Failed to spawn window: {e}")
+
+def start_tray_thread(shutdown_cb):
+    """Starts the tray icon in a separate thread."""
     global tray
-    # We need a way to stop the app from the tray.
-    # Since ui.run() blocks, we can't easily pass 'app.shutdown'.
-    # But checking docs, app.shutdown() is available.
-    def shutdown_app():
-        logger.info("Shutdown requested via Tray.")
-        app.shutdown() 
+    
+    # This runs in a thread, so it can call spawn_window directly (subprocess is thread-safe)
+    def on_show_request():
+        spawn_window()
 
-    tray = ErikaTray(shutdown_callback=shutdown_app)
+    tray = ErikaTray(shutdown_callback=shutdown_cb, on_show_callback=on_show_request)
     tray.run()
 
-async def shutdown():
-    """Application shutdown hook."""
-    logger.info("Graceful shutdown initiated...")
+def main():
+    global lock, tray, brain, memory, controller
     
-    # Release Lock
+    logger.info("Engine: Bootstrapping Service...")
+    
+    # 1. Acquire Lock
+    lock = WindowsSingleton()
+    if not lock.acquire():
+        logger.warning("Engine: Instance already active, exiting.")
+        sys.exit(0)
+    
+    logger.info("Engine: Singleton lock acquired.")
+    
+    # 2. Init Core Components
+    logger.info("Engine: Initializing Brain & Memory...")
+    memory = Memory()
+    brain = Brain()
+    controller = Controller(brain, memory)
+    
+    # 3. Build UI
+    @ui.page('/')
+    def main_page():
+        build_ui(controller)
+        # Load history on page load
+        if controller.current_chat_id:
+             asyncio.create_task(controller.load_chat_session(controller.current_chat_id))
+        else:
+             asyncio.create_task(controller.load_history())
+
+    # 4. Start Tray in Background Thread
+    # Pass cleanup as shutdown callback. 
+    # NOTE: nicegui app.shutdown only stops the server. We want FULL process cleanup.
+    # So tray exit -> cleanup() -> sys.exit().
+    t = threading.Thread(target=start_tray_thread, args=(cleanup,), daemon=True)
+    t.start()
+    
+    # Register NiceGUI shutdown hook to cleanup if server stops naturally
+    app.on_shutdown(cleanup)
+
+    # 6. Run Server using Uvicorn (Blocking)
+    logger.info(f"Engine: Starting Server at port {UI_PORT}...")
+    # native=False -> Browser Mode (Server only)
+    # show=False -> Don't open system browser
+    # reload=False
     try:
-        singleton_lock.release()
+        ui.run(native=False, port=UI_PORT, show=False, reload=False, title="Erika AI")
     except Exception as e:
-        logger.error(f"Error releasing singleton lock: {e}")
+        logger.error(f"Engine: Server crashed: {e}")
+        cleanup()
 
-    # Stop Tray
-    global tray
-    if tray:
-        tray.stop()
-        logger.info("Tray stopped.")
-        
-    # Cleanup Controllers
-    for c in active_controllers:
-        try:
-            c.cleanup()
-        except Exception as e:
-            logger.error(f"Error cleaning up controller: {e}")
-            
-    logger.info("Shutdown complete.")
-
-app.on_startup(force_silence_logs)
-app.on_startup(startup)
-app.on_shutdown(shutdown)
-
-app.add_static_files('/assets', 'assets')
-
-@ui.page('/')
-def main_page():
-    # 2. Setup Page Context
-    ui.colors(primary='#f3f4f6', secondary='#262626', accent='#111b21', dark='#1d1d1d')
-    ui.query('body').classes('bg-[#212121] text-white p-0 m-0') 
-    ui.query('.q-page').classes('flex flex-col h-screen w-full p-0 m-0 overflow-hidden') # FORCE no padding, no scroll on page root
-    
-    # Init App & Track Controller
-    state, controller = init_app()
-    active_controllers.append(controller)
-
-    # 3. Define UI Refresh Logic
-    async def update_ui():
-        """Refreshes reactive components."""
-        chat_container.refresh()
-        # Scroll logic might be needed here
-
-    # Hook Controller to UI
-    controller.refresh_ui = update_ui
-
-    # 4. Layout
-    
-    # Left Sidebar
-    Sidebar(
-        history=controller.memory.list_all_chats(), 
-        on_select=lambda chat_id: print(f"Select {chat_id}"), 
-        on_new=controller.handle_new_chat,
-        on_settings=lambda: ui.notify("Settings clicked")
-    )
-
-    # Main Content Area - constrained to screen height, NO overflow on parent
-    with ui.column().classes('w-full h-screen relative p-0 m-0 gap-0 overflow-hidden'):
-        
-        # Chat History / Hero (Refreshable)
-        @ui.refreshable
-        def chat_container():
-            # Use flex-grow to take available space. overflow-y-auto to scroll THIS container, not the page.
-            # pb-32 to allow scrolling past the fixed input pill.
-            with ui.column().classes('w-full h-full overflow-y-auto pb-32 no-scrollbar'):
-                if not state.messages:
-                    HeroSection()
-                else:
-                    ChatArea(state.messages)
-                    
-                    if state.is_loading:
-                        # Loading Indicator
-                        with ui.row().classes('w-full justify-start px-4'):
-                             ui.spinner('dots', size='lg', color='gray')
-
-        chat_container()
-
-        # Input Area (Fixed Bottom)
-        # We perform a check to ensure dependencies are loaded
-        valid_models = controller.brain.get_available_models()
-        valid_models = valid_models if valid_models else ["No Models Found"]
-        
-        with ui.column().classes('absolute bottom-0 w-full items-center z-20 pointer-events-none'):
-             # InputPill needs wrapper to re-enable pointer events since parent disables them (to let clicks pass through to chat)
-             with ui.column().classes('w-full items-center pointer-events-auto'):
-                InputPill(
-                    models=valid_models,
-                    on_send=controller.handle_send, # Mapped to controller
-                    on_tool_toggle=lambda: ui.notify("Upload/Tools")
-                )
-
-from interface.tray import ErikaTray
-
-# 5. Launch
-if __name__ in {"__main__", "__mp_main__"}:
-    setup_global_capture()
-    logger.info("Starting Erika-AI Interface...")
-    
-    # Note: native=True requires pywebview. If missing, NiceGUI might warn or fail gracefully.
-    # We use a try-block for safety if we wanted, but ui.run doesn't throw easily.
-    # We enable native mode as requested.
-    ui.run(
-        title="Erika AI",
-        dark=True,
-        reload=False,
-        native=True,
-        window_size=(1200, 800),
-        frameless=False
-    )
+if __name__ == "__main__":
+    main()

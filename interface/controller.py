@@ -1,113 +1,90 @@
+from engine.brain import Brain
+from engine.memory import Memory
+from engine.logger import setup_engine_logger
 import asyncio
-from typing import Optional, Callable, Awaitable
-from interface.state import AppState
-from core.brain import Brain
-from core.memory import MemoryManager
-from core.settings import SettingsManager
-from core.logger import setup_logger
 
-logger = setup_logger("INTERFACE.Controller")
+logger = setup_engine_logger("INTERFACE.Controller")
 
-class ErikaController:
-    """
-    Orchestrates the application logic.
-    - Bridges 'interface/state.py' (Model) with 'core/' (Backend).
-    - Handles user actions and updates state.
-    """
-
-    def __init__(self, state: AppState, settings_manager: Optional[SettingsManager] = None, memory_manager: Optional[MemoryManager] = None):
-        self.state = state
-        self.settings = settings_manager if settings_manager else SettingsManager()
-        self.memory = memory_manager if memory_manager else MemoryManager(self.settings)
-        self.brain = Brain(self.settings)
+class Controller:
+    def __init__(self, brain: Brain, memory: Memory):
+        self.brain = brain
+        self.memory = memory
+        self.current_chat_id = None
+        self.chat_history = []  # In-memory messages for UI
+        self.refresh_ui_callback = None
         
-        # Callback to trigger UI refresh (dependency injection by Assembler ideally)
-        self.refresh_ui: Optional[Callable[[], Awaitable[None]]] = None
+    def bind_view(self, refresh_callback):
+        """Binds the view refresh callback."""
+        self.refresh_ui_callback = refresh_callback
+
+    def new_chat(self):
+        """Starts a new chat."""
+        self.current_chat_id = self.memory.create_chat()
+        self.chat_history = []
+        if self.refresh_ui_callback:
+            self.refresh_ui_callback()
+        logger.info(f"Controller: New chat started {self.current_chat_id}")
+
+    async def load_history(self):
+        """Loads list of chats for sidebar."""
+        return self.memory.list_chats()
+
+    async def load_chat_session(self, chat_id: str):
+        """Loads a specific chat session."""
+        data = self.memory.get_chat(chat_id)
+        if data:
+            self.current_chat_id = chat_id
+            self.chat_history = data.get("messages", [])
+            if self.refresh_ui_callback:
+                self.refresh_ui_callback()
+            logger.info(f"Controller: Loaded chat {chat_id}")
+
+    async def handle_user_input(self, content: str):
+        """Processes user input."""
+        if not self.current_chat_id:
+            self.new_chat()
+            
+        # 1. Add User Message
+        user_msg = {"role": "user", "content": content}
+        self.chat_history.append(user_msg)
+        if self.refresh_ui_callback:
+            self.refresh_ui_callback()
+            
+        # 2. Persist
+        self._persist()
         
-        # Initialize
-        self._load_initial_data()
-
-    def cleanup(self):
-        """Clean up resources before shutdown."""
-        logger.info("Controller: Cleanup initiated.")
-        # Cancel any active generation tasks here if we track them
-        # For now, we just log. 
-        # Future: self.brain.cancel_generation()
-        pass
-
-    def _load_initial_data(self):
-        # Load last chat or settings?
-        self.state.selected_model = self.settings.get("user", "model", "llama3")
-
-    async def handle_send(self, content: str):
-        if not content.strip():
-            return
-            
-        # 0. Core Loop: Prepare context
-        # If no chat, create one? For now assume ephemeral or create on fly.
-        # Ideally we map state messages to a chat ID.
-        # Let's create a chat if empty list (first msg)
-        current_chat_id = getattr(self.state, 'current_chat_id', None)
-        if not current_chat_id:
-            current_chat_id = self.memory.create_chat()
-            setattr(self.state, 'current_chat_id', current_chat_id)
-
-        # 1. Update State (Optimistic User Msg)
-        self.state.messages.append({'role': 'user', 'content': content})
-        self.memory.save_message(current_chat_id, "user", content)
+        # 3. Generate Response
+        # Create a placeholder for assistant
+        assistant_msg = {"role": "assistant", "content": ""}
+        self.chat_history.append(assistant_msg)
         
-        if self.refresh_ui: await self.refresh_ui()
+        # Stream response
+        full_response = ""
+        async for chunk in self.brain.generate_response(model="llama3", messages=self.chat_history[:-1]):
+            if "content" in chunk: # Ollama raw response format might differ?
+                # brain.py wrapper yields chunk directly.
+                # Standard Ollama AsyncClient returns object with 'message' -> 'content' or streaming dict?
+                # Wrapper `yield chunk` from `await client.chat(..., stream=True)`
+                # chunk is usually a dict like {'message': {'content': 't'}, 'done': False}
+                content_bit = chunk.get('message', {}).get('content', '')
+                full_response += content_bit
+                assistant_msg['content'] = full_response
+                if self.refresh_ui_callback:
+                    # Throttle updates? NiceGUI handles reasonable frequency.
+                    self.refresh_ui_callback()
+            elif "error" in chunk:
+                 assistant_msg['content'] = f"Error: {chunk['error']}"
+        
+        # 4. Persist Final
+        self._persist()
+        logger.info("Controller: Response complete.")
 
-        # 2. Inference
-        self.state.is_loading = True
-        if self.refresh_ui: await self.refresh_ui()
-
-        try:
-            # Prepare messages for Brain
-            # We strictly pass list of dicts.
-            # Assuming Brain accepts state['messages'] format.
-            context_messages = self.state.messages
-            
-            # Create placeholder for assistant response
-            self.state.messages.append({'role': 'assistant', 'content': ''})
-            full_response = ""
-            
-            # Stream response
-            # Note: think_stream is a generator. We must iterate it.
-            # If it's synchronous generator, we block.
-            # If Brain.think_stream is just `yield`, it's sync. 
-            # To be non-blocking in NiceGUI, we should run it in executor or iterate with small sleeps if sync.
-            # HOWEVER, Phase 1.4 implementation was `yield`. 
-            # We wrap iteration in a way that doesn't freeze UI if possible, 
-            # generally standard loop is fine if fast, but for LLM, we need async.
-            # But Brain is currently sync generator.
-            # We will iterate it directly.
-            
-            for chunk in self.brain.think_stream(context_messages[:-1]): # Exclude the empty assistant msg we just added? No, Brain needs history.
-                # Actually we shouldn't pass the empty assistant placeholder.
-                # So we pass up to the user message.
-                
-                full_response += chunk
-                self.state.messages[-1]['content'] = full_response
-                
-                # Signal UI update
-                if self.refresh_ui: await self.refresh_ui()
-                
-                # Yield control to event loop (critical for UI responsiveness)
-                await asyncio.sleep(0.01)
-                
-            # 3. Save Final
-            self.memory.save_message(current_chat_id, "assistant", full_response)
-            
-        except Exception as e:
-            logger.error(f"Error in handle_send: {e}")
-            self.state.messages.append({'role': 'system', 'content': f"Error: {str(e)}"})
-            
-        finally:
-            self.state.is_loading = False
-            if self.refresh_ui: await self.refresh_ui()
-
-    async def handle_new_chat(self):
-        self.state.messages = []
-        setattr(self.state, 'current_chat_id', None) # Clear ID
-        if self.refresh_ui: await self.refresh_ui()
+    def _persist(self):
+        """Saves current state to memory."""
+        if self.current_chat_id:
+            data = {
+                "id": self.current_chat_id,
+                "created_at": "TODO", # Should preserve original
+                "messages": self.chat_history
+            }
+            self.memory.save_chat(self.current_chat_id, data)

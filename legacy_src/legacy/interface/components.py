@@ -21,24 +21,50 @@ def Sidebar(
             
             ui.separator().classes('bg-gray-700 my-2')
             
-            # History List (Grouped by "Today" mostly for visual mock, simplistic list here)
+@ui.refreshable
+def ChatHistoryList(history: List[Dict[str, Any]], on_select: Callable[[str], None]):
+    if not history:
+        ui.label('No history').classes('text-gray-600 text-sm px-2')
+        
+    for chat in history:
+        # Truncate title
+        title = chat.get('preview', 'New Chat')
+        if len(title) > 30:
+            title = title[:27] + '...'
+            
+        # Using a flat button for each chat item
+        ui.button(
+            title, 
+            on_click=lambda c=chat: on_select(c.get('id'))
+        ).classes('w-full text-left text-gray-300 text-sm bg-transparent hover:bg-gray-800 rounded px-2 py-1 truncate')
+
+def Sidebar(
+    history: List[Dict[str, Any]], 
+    on_select: Callable[[str], None], 
+    on_new: Callable[[], None],
+    on_settings: Callable[[], None]
+):
+    """Left drawer with chat history."""
+    with ui.left_drawer().style(DRAWER_STYLE).props('width=260 behavior=desktop'):
+        with ui.column().classes('w-full p-2 gap-2'):
+            # New Chat Button
+            ui.button('New Chat', on_click=on_new).classes(
+                'w-full text-white bg-transparent border border-gray-700 hover:bg-gray-800 rounded-md'
+            )
+            
+            ui.separator().classes('bg-gray-700 my-2')
+            
+            # History List
             ui.label('History').classes('text-xs text-gray-500 font-bold px-2')
             
             with ui.scroll_area().classes('h-full w-full'):
-                if not history:
-                    ui.label('No history').classes('text-gray-600 text-sm px-2')
-                    
-                for chat in history:
-                    # Using a flat button for each chat item
-                    # Text truncation logic would go here or in preview data
-                    ui.button(
-                        chat.get('preview', 'Chat'), 
-                        on_click=lambda c=chat: on_select(c.get('id'))
-                    ).classes('w-full text-left text-gray-300 text-sm bg-transparent hover:bg-gray-800 rounded px-2 py-1 truncate')
+                ChatHistoryList(history, on_select)
 
             # Bottom Settings Alignment
             with ui.row().classes('w-full mt-auto p-2'):
                  ui.button(icon='settings', on_click=on_settings).props('flat round color=white')
+                 
+    return ChatHistoryList
 
 def HeroSection():
     """Centered logo for empty state."""

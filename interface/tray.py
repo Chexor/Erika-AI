@@ -1,68 +1,60 @@
+import pystray
+from pystray import MenuItem as item
+from PIL import Image
 import os
 import threading
-import pystray
-from PIL import Image
-from pystray import MenuItem as item
-import webbrowser
-from core.logger import setup_logger
+from engine.logger import setup_engine_logger
 
-logger = setup_logger("INTERFACE.Tray")
+# Use Engine Logger for Tray as well
+logger = setup_engine_logger("INTERFACE.Tray")
 
 class ErikaTray:
-    def __init__(self, controller=None, shutdown_callback=None):
-        self.controller = controller
+    def __init__(self, shutdown_callback, on_show_callback=None):
         self.shutdown_callback = shutdown_callback
+        self.on_show_callback = on_show_callback
         self.icon = None
-        self.thread = None
         
         # Load Icon
-        # Try assets first, generate fallback if missing
-        icon_path = os.path.join("assets", "icon.png") # Or use the transparent logo
-        if not os.path.exists(icon_path):
-             icon_path = os.path.join("assets", "Erika-AI_logo2_transparant.png")
-             
-        try:
-            self.image = Image.open(icon_path)
-        except Exception as e:
-            logger.error(f"Failed to load icon: {e}")
-            # Fallback: Create simple block
-            self.image = Image.new('RGB', (64, 64), color = (73, 109, 137))
-            
+        self.image = self._load_icon()
+        
+        # Build Menu
         self.menu = pystray.Menu(
-            item('Open WebUI', self.on_open, default=True),
-            item('Quit', self.on_quit)
+            item('Show Erika', self.on_show, default=True),
+            item('Exit', self.on_exit)
         )
         
         self.icon = pystray.Icon("Erika AI", self.image, "Erika AI", self.menu)
 
-    def on_open(self, icon, item):
-        logger.info("Tray: Opening WebUI...")
-        webbrowser.open("http://localhost:8080")
+    def _load_icon(self):
+        """Loads icon from assets or generates fallback."""
+        icon_path = os.path.join("assets", "icon.png")
+        if os.path.exists(icon_path):
+            try:
+                return Image.open(icon_path)
+            except Exception as e:
+                logger.error(f"Failed to load icon file: {e}")
+        
+        # Fallback: Blue Square
+        logger.info("Using fallback icon.")
+        return Image.new('RGB', (64, 64), color=(73, 109, 137))
 
-    def on_quit(self, icon, item):
-        logger.info("Tray: Quit requested")
+    def on_show(self, icon, item):
+        """Handler for 'Show Erika'."""
+        logger.info("Tray: User requested UI (Show Erika).")
+        if self.on_show_callback:
+            self.on_show_callback()
+        
+    def on_exit(self, icon, item):
+        """Handler for 'Exit'."""
+        logger.info("Tray: Exit requested.")
+        if self.icon:
+            self.icon.stop()
+            
         if self.shutdown_callback:
             logger.info("Tray: Triggering shutdown callback...")
             self.shutdown_callback()
-        else:
-             logger.warning("Tray: No shutdown callback registered!")
-             
-        if self.icon:
-            self.icon.stop()
-        
-    def stop(self):
-        """Stops the tray icon."""
-        if self.icon:
-             self.icon.stop()
 
     def run(self):
-        """Runs the tray icon in a separate thread."""
-        logger.info("Starting System Tray...")
-        self.thread = threading.Thread(target=self._run_icon, daemon=True)
-        self.thread.start()
-
-    def _run_icon(self):
-        try:
-            self.icon.run()
-        except Exception as e:
-            logger.error(f"Tray crashed: {e}")
+        """Blocking run call for the tray."""
+        logger.info("Tray: Starting icon loop...")
+        self.icon.run() 
