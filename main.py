@@ -6,9 +6,7 @@ os.environ["TRANSFORMERS_OFFLINE"] = "1"
 import asyncio
 import threading
 import sys
-import atexit
 import subprocess
-import os
 from nicegui import ui, app
 
 from engine.logger import setup_engine_logger
@@ -22,7 +20,8 @@ from interface.view import build_ui
 # Setup Global Logger
 logger = setup_engine_logger("ENGINE")
 
-# Global State
+# Global State with Thread Safety
+_state_lock = threading.Lock()
 lock = None
 tray = None
 brain = None
@@ -35,37 +34,42 @@ UI_PORT = 3333
 def cleanup():
     """Cleanup handler."""
     global lock, shutting_down, window_process, controller
-    if shutting_down:
-        return
-    shutting_down = True
-    
+
+    with _state_lock:
+        if shutting_down:
+            return
+        shutting_down = True
+
     logger.info("Engine: Cleanup initiated.")
-    
+
     # Stop System Monitor
     if controller and hasattr(controller, 'system_monitor'):
-        controller.system_monitor.stop()
+        try:
+            controller.system_monitor.stop()
+        except (RuntimeError, AttributeError) as e:
+            logger.warning(f"Error stopping system monitor: {e}")
 
     try:
         if tray and tray.icon:
             tray.icon.stop()
-    except Exception:
-        pass
-    
+    except (RuntimeError, AttributeError) as e:
+        logger.warning(f"Error stopping tray: {e}")
+
     # Kill window process if active
     if window_process:
         try:
             window_process.terminate()
             logger.info("Engine: Window process terminated.")
-        except Exception:
-            pass
+        except (OSError, ProcessLookupError) as e:
+            logger.warning(f"Error terminating window process: {e}")
 
     if lock:
         try:
             lock.release()
             logger.info("Engine: Lock released.")
-        except Exception as e:
+        except (IOError, OSError) as e:
             logger.error(f"Error releasing lock: {e}")
-            
+
     logger.info("Engine: Graceful Shutdown.")
     # Force exit to kill any hanging threads and avoid SystemExit exception in pystray
     os._exit(0)
@@ -73,76 +77,78 @@ def cleanup():
 def spawn_window():
     """Spawns the detached window client."""
     global window_process
-    
-    # Check if already running
-    if window_process and window_process.poll() is None:
-        logger.info("Engine: Window already active.")
-        return
 
-    logger.info("Engine: Spawning UI Window...")
-    script_path = os.path.join(os.path.dirname(__file__), 'interface', 'window_client.py')
-    url = f"http://localhost:{UI_PORT}"
-    
-    # Use same python interpreter
-    python_exe = sys.executable
-    
-    try:
-        # Popen is non-blocking
-        window_process = subprocess.Popen([python_exe, script_path, "--url", url, "--title", "Erika AI"])
-        logger.info(f"Engine: Window spawned (PID: {window_process.pid})")
-    except Exception as e:
-        logger.error(f"Engine: Failed to spawn window: {e}")
+    with _state_lock:
+        # Check if already running
+        if window_process and window_process.poll() is None:
+            logger.info("Engine: Window already active.")
+            return
+
+        logger.info("Engine: Spawning UI Window...")
+        script_path = os.path.join(os.path.dirname(__file__), 'interface', 'window_client.py')
+        url = f"http://localhost:{UI_PORT}"
+
+        # Use same python interpreter
+        python_exe = sys.executable
+
+        try:
+            # Popen is non-blocking
+            window_process = subprocess.Popen([python_exe, script_path, "--url", url, "--title", "Erika AI"])
+            logger.info(f"Engine: Window spawned (PID: {window_process.pid})")
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.error(f"Engine: Failed to spawn window: {e}")
 
 def restart_window():
     """Restarts the window process."""
     global window_process
     logger.info("Engine: Restarting UI Window...")
-    
-    if window_process:
-        try:
-            window_process.terminate()
-            # Give it a moment to die gracefully if needed, though terminate is usually swift
+
+    with _state_lock:
+        if window_process:
             try:
-                window_process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                window_process.kill()
-        except Exception as e:
-            logger.error(f"Engine: Error killing window: {e}")
-        window_process = None
-        
+                window_process.terminate()
+                # Give it a moment to die gracefully
+                try:
+                    window_process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    window_process.kill()
+            except (OSError, ProcessLookupError) as e:
+                logger.error(f"Engine: Error killing window: {e}")
+            window_process = None
+
     spawn_window()
 
 def restart_agent():
     """Restarts the entire agent process."""
     global lock, tray, window_process
     logger.info("Engine: Restarting Agent (Full Process)...")
-    
+
     # 1. Kill Window
     if window_process:
         try:
             window_process.terminate()
-        except: 
-            pass
-            
+        except (OSError, ProcessLookupError) as e:
+            logger.warning(f"Engine: Error terminating window for restart: {e}")
+
     # 2. Stop Tray (Important to remove icon)
     if tray and tray.icon:
         try:
             tray.icon.stop()
-        except:
-            pass
+        except (RuntimeError, AttributeError) as e:
+            logger.warning(f"Engine: Error stopping tray for restart: {e}")
 
     # 3. Release Lock
     if lock:
         try:
             lock.release()
             logger.info("Engine: Lock released for restart.")
-        except Exception as e:
+        except (IOError, OSError) as e:
             logger.error(f"Engine: Error releasing lock: {e}")
 
-    # 4. Restart Process
-    # os.execl replaces the current process with a new one
+    # 4. Restart Process - use explicit script path instead of sys.argv for security
     python = sys.executable
-    os.execl(python, python, *sys.argv)
+    script_path = os.path.abspath(__file__)
+    os.execl(python, python, script_path)
 
 def start_tray_thread(shutdown_cb, restart_cb, restart_agent_cb):
     """Starts the tray icon in a separate thread."""

@@ -1,5 +1,21 @@
 from nicegui import ui
 
+# Whitelist of allowed handler methods for security (prevents arbitrary method execution)
+ALLOWED_HANDLERS = frozenset({
+    'set_username',
+    'set_persona_prompt',
+    'set_tts_voice',
+    'set_tts_volume',
+    'set_tts_autoplay',
+    'set_context_window',
+})
+
+def _safe_get_handler(controller, handler_name: str):
+    """Safely retrieves a handler method if it's in the whitelist."""
+    if handler_name not in ALLOWED_HANDLERS:
+        return None
+    return getattr(controller, handler_name, None)
+
 # --- CONFIGURATION SCHEMA ---
 # Modify this dictionary to add/remove/change settings.
 SETTINGS_CONFIG = [
@@ -163,7 +179,7 @@ def render_slider(item):
 
 def render_input(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
-    
+
     # Resolve initial value
     val = item.get('default', '')
     if controller and 'key' in item:
@@ -171,7 +187,7 @@ def render_input(item, controller=None):
 
     def on_change(e):
         if controller and 'change_handler' in item:
-            method = getattr(controller, item['change_handler'], None)
+            method = _safe_get_handler(controller, item['change_handler'])
             if method:
                 method(e.value)
 
@@ -181,17 +197,17 @@ def render_input(item, controller=None):
 
 def render_textarea(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
-    
+
     val = item.get('default', '')
     if controller and 'key' in item:
         val = controller.settings.get(item['key'], val)
-        
+
     def on_change(e):
         if controller and 'change_handler' in item:
-            method = getattr(controller, item['change_handler'], None)
+            method = _safe_get_handler(controller, item['change_handler'])
             if method:
                 method(e.value)
-                
+
     ui.textarea(placeholder=item.get('placeholder', ''), value=val, on_change=on_change)\
         .classes('w-full input-field bg-white/5 rounded-xl p-2 border border-white/10')\
         .props('input-class="text-white" borderless rows=4 debounce="500"')
@@ -227,13 +243,13 @@ def render_metrics(item):
 def render_select(item, controller=None):
     with ui.column().classes('w-full gap-1'):
         ui.label(item['label']).classes('text-sm text-gray-400')
-        
+
         def on_change(e):
-             if controller and 'change_handler' in item:
-                 method = getattr(controller, item['change_handler'], None)
-                 if method:
-                     method(e.value)
-        
+            if controller and 'change_handler' in item:
+                method = _safe_get_handler(controller, item['change_handler'])
+                if method:
+                    method(e.value)
+
         ui.select(options=item['options'], value=item['default'], on_change=on_change).props('outlined dense options-dense behavior=menu input-class=text-white input-style="color: white !important" label-color="gray-4" color="blue-4" popup-content-class="bg-slate-900 text-white"').classes('w-full bg-slate-800/50 rounded-lg text-white')
 
 def render_step_slider(item, controller=None):
@@ -241,31 +257,32 @@ def render_step_slider(item, controller=None):
         ui.label(item['label']).classes('text-sm text-gray-400')
         if 'sub' in item:
             ui.label(item['sub']).classes('text-xs text-gray-600 mb-2')
-        
+
         steps = item['steps']
         default_idx = item.get('default_index', 0)
-        
+
         # Current value label
         val_label = ui.label(steps[default_idx]).classes('text-xs font-bold text-blue-400 self-end')
-        
+
         def on_change(e):
             idx = int(e.value)
             if 0 <= idx < len(steps):
                 val_str = steps[idx]
                 val_label.set_text(val_str)
-                # Update Controller
-                # Parse "8k" -> 8192
+                # Update Controller - Parse "8k" -> 8192
                 try:
                     kb = int(val_str.lower().replace('k', ''))
                     tokens = kb * 1024
                     if controller:
-                        controller.set_context_window(tokens)
-                except:
-                    pass
+                        method = _safe_get_handler(controller, 'set_context_window')
+                        if method:
+                            method(tokens)
+                except ValueError:
+                    pass  # Invalid format, ignore
 
         with ui.row().classes('w-full items-center gap-4'):
-             s = ui.slider(min=0, max=len(steps)-1, step=1, value=default_idx, on_change=on_change).props('color=blue track-color=grey-8 selection-color=blue').classes('w-full')
-             
+            ui.slider(min=0, max=len(steps)-1, step=1, value=default_idx, on_change=on_change).props('color=blue track-color=grey-8 selection-color=blue').classes('w-full')
+
         # Step labels below
         with ui.row().classes('w-full justify-between px-1'):
             for step in steps:

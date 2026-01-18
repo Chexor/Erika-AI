@@ -27,22 +27,23 @@ class TestAwakening(unittest.IsolatedAsyncioTestCase):
                 mock_file.assert_called()
 
     async def test_system_prompt_injection(self):
-        """Verify system prompt contains the Librarian Reflection."""
+        """Verify system prompt contains the Yesterday's Perspective reflection."""
         if not Controller: self.skipTest("No Controller")
-        
+
         # Setup Controller with mocked Reflector
         mock_reflector = MagicMock()
         mock_reflector.get_latest_reflection.return_value = "Tim was happy."
-        
+
         controller = Controller(MagicMock(), MagicMock())
         controller.reflector = mock_reflector
-        
+
         # We assume a method build_system_prompt exists
         prompt = controller.build_system_prompt()
-        
-        self.assertIn("LIBRARIAN REFLECTION", prompt)
-        self.assertIn("Tim was happy", prompt)
+
+        # Check for the actual prompt format used in controller.py
         self.assertIn("INTERNAL MEMORY", prompt)
+        self.assertIn("YESTERDAY'S PERSPECTIVE", prompt)
+        self.assertIn("Tim was happy", prompt)
 
 if __name__ == '__main__':
     unittest.main()

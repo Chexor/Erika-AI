@@ -1,7 +1,10 @@
 import os
-import sys
 import tempfile
 import msvcrt
+import logging
+
+logger = logging.getLogger("ENGINE.Singleton")
+
 
 class WindowsSingleton:
     def __init__(self):
@@ -13,25 +16,23 @@ class WindowsSingleton:
         Acquire the lock. Returns True on success, False if already locked.
         """
         try:
-            if os.path.exists(self.lockfile):
-                # If file exists, try to open it r+ to lock
-                pass
-            
             # Open for reading/writing, creating if needed
             self.fp = open(self.lockfile, 'w')
-            
-            # Try to lock
-            # LK_NBL: Non-blocking lock
-            # LK_NBRL: Non-blocking byte range lock
+
+            # Try to lock (non-blocking)
             msvcrt.locking(self.fp.fileno(), msvcrt.LK_NBLCK, 1)
-            
+
             self.fp.write(str(os.getpid()))
             self.fp.flush()
             return True
-        except (IOError, PermissionError):
-            # Already locked
+        except (IOError, PermissionError, OSError) as e:
+            # Already locked or permission denied
+            logger.debug(f"Singleton: Lock acquisition failed: {e}")
             if self.fp:
-                self.fp.close()
+                try:
+                    self.fp.close()
+                except OSError:
+                    pass
                 self.fp = None
             return False
 
@@ -42,12 +43,15 @@ class WindowsSingleton:
                 # Unlock
                 self.fp.seek(0)
                 msvcrt.locking(self.fp.fileno(), msvcrt.LK_UNLCK, 1)
-            except Exception:
-                pass
+            except (IOError, OSError) as e:
+                logger.debug(f"Singleton: Error unlocking: {e}")
             finally:
-                self.fp.close()
+                try:
+                    self.fp.close()
+                except OSError:
+                    pass
                 try:
                     os.remove(self.lockfile)
-                except Exception:
-                    pass
+                except OSError as e:
+                    logger.debug(f"Singleton: Error removing lock file: {e}")
                 self.fp = None

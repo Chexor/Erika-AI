@@ -2,11 +2,21 @@ import os
 import json
 import uuid
 import datetime
+import re
 from typing import List, Dict, Any, Optional
 from engine.logger import setup_engine_logger
 from engine.modules.time_keeper import TimeKeeper
 
 logger = setup_engine_logger("ENGINE.Memory")
+
+# UUID validation pattern
+UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+
+def _is_valid_uuid(value: str) -> bool:
+    """Validates that a string is a proper UUID format to prevent path traversal."""
+    if not value or not isinstance(value, str):
+        return False
+    return bool(UUID_PATTERN.match(value))
 
 class Memory:
     def __init__(self, base_path="chats"):
@@ -28,10 +38,15 @@ class Memory:
 
     def _find_chat_path(self, chat_id: str) -> Optional[str]:
         """Recursively searches for a chat file."""
+        # Security: Validate UUID format to prevent path traversal
+        if not _is_valid_uuid(chat_id):
+            logger.warning(f"Invalid chat_id format rejected: {chat_id[:50]}")
+            return None
+
         # 1. Check root (legacy/flat)
         root_path = os.path.join(self.base_path, f"{chat_id}.json")
         if os.path.exists(root_path): return root_path
-        
+
         # 2. Check subfolders
         for root, dirs, files in os.walk(self.base_path):
             if f"{chat_id}.json" in files:
@@ -40,6 +55,11 @@ class Memory:
 
     def save_chat(self, chat_id: str, data: Dict[str, Any]):
         """Saves chat data to file in date-based subfolder (Circadian)."""
+        # Security: Validate UUID format to prevent path traversal
+        if not _is_valid_uuid(chat_id):
+            logger.warning(f"Invalid chat_id format rejected in save_chat: {chat_id[:50]}")
+            return
+
         # Determine folder DD-MM-YYYY
         created_at = data.get('created_at')
         if created_at:
@@ -74,8 +94,10 @@ class Memory:
         # Clean up legacy location
         legacy_path = os.path.join(self.base_path, f"{chat_id}.json")
         if os.path.exists(legacy_path) and os.path.abspath(legacy_path) != os.path.abspath(file_path):
-             try: os.remove(legacy_path)
-             except: pass
+            try:
+                os.remove(legacy_path)
+            except OSError as e:
+                logger.warning(f"Failed to remove legacy chat file: {e}")
 
         try:
             with open(file_path, 'w', encoding='utf-8') as f:

@@ -19,7 +19,7 @@ class Brain:
             logger.warning(f"Ollama unavailable at {self.host}: {e}")
             return False
 
-    async def generate_response(self, model: str, messages: list, host: str = None):
+    async def generate_response(self, model: str, messages: list, host: str = None, options: dict = None):
         """Generates a streamed response."""
         
         # Determine client to use
@@ -29,7 +29,7 @@ class Brain:
              target_client = AsyncClient(host=host)
 
         try:
-            async for chunk in await target_client.chat(model=model, messages=messages, stream=True):
+            async for chunk in await target_client.chat(model=model, messages=messages, stream=True, options=options):
                 # Ensure we yield a dict, not a Pydantic object
                 if hasattr(chunk, 'model_dump'):
                     yield chunk.model_dump()

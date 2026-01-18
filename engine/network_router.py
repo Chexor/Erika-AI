@@ -1,29 +1,68 @@
-
 import httpx
 import logging
-import asyncio
+import json
+import os
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger("ENGINE.BrainRouter")
 
+# Default configuration - can be overridden via environment variables or config files
+DEFAULT_LOCAL_BRAIN = "http://localhost:11434"
+DEFAULT_REMOTE_BRAIN = "http://192.168.0.69:11434"
+DEFAULT_LOCAL_MODEL = "qwen3:14b"
+DEFAULT_REMOTE_MODEL = "gemma2:9b"
+
+
 class BrainRouter:
     def __init__(self):
-        # Configuration
-        self.LOCAL_BRAIN = "http://localhost:11434"
-        self.REMOTE_BRAIN = "http://192.168.0.69:11434"
-        
-        self.LOCAL_MODEL = "qwen3:14b"
-        self.REMOTE_MODEL = "gemma2:9b"
-        
+        # Configuration from environment variables or defaults
+        self.LOCAL_BRAIN = os.environ.get("ERIKA_LOCAL_BRAIN", DEFAULT_LOCAL_BRAIN)
+        self.REMOTE_BRAIN = os.environ.get("ERIKA_REMOTE_BRAIN", DEFAULT_REMOTE_BRAIN)
+
+        self.LOCAL_MODEL = os.environ.get("ERIKA_LOCAL_MODEL", DEFAULT_LOCAL_MODEL)
+        self.REMOTE_MODEL = os.environ.get("ERIKA_REMOTE_MODEL", DEFAULT_REMOTE_MODEL)
+
         self.nodes = {
             'local': self.LOCAL_BRAIN,
             'remote': self.REMOTE_BRAIN
         }
-        
+
+        # Load Shared Config
+        self.llm_config: Dict[str, Any] = {
+            "consciousness_5070ti": {},
+            "subconscious_3060": {}
+        }
+
+        # Check both potential locations for config file
+        possible_paths = [
+            os.path.join("config", "llm_config.json"),
+            os.path.join("erika_home", "config", "llm_config.json")
+        ]
+
+        for path in possible_paths:
+            if os.path.exists(path):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        self.llm_config = json.load(f)
+                    logger.info(f"BrainRouter: Loaded LLM Config from {path}")
+                    break
+                except (json.JSONDecodeError, IOError) as e:
+                    logger.error(f"BrainRouter: Failed to load config from {path}: {e}")
+
         # State
         self.status = {
-            'local': False, 
+            'local': False,
             'remote': False
         }
+
+        logger.info(f"BrainRouter initialized: Local={self.LOCAL_BRAIN}, Remote={self.REMOTE_BRAIN}")
+
+    def get_model_options(self, node_type: str) -> dict:
+        """Returns model parameters (temp, ctx, etc) from config."""
+        if node_type == 'remote':
+             return self.llm_config.get("subconscious_3060", {}).get("options", {})
+        else:
+             return self.llm_config.get("consciousness_5070ti", {}).get("options", {})
         
     async def check_availability(self, url: str) -> bool:
         """Pings an Ollama instance."""
@@ -31,7 +70,14 @@ class BrainRouter:
             async with httpx.AsyncClient(timeout=2.0) as client:
                 resp = await client.get(f"{url}/api/tags")
                 return resp.status_code == 200
-        except Exception:
+        except httpx.TimeoutException:
+            logger.debug(f"BrainRouter: Timeout checking availability of {url}")
+            return False
+        except httpx.ConnectError:
+            logger.debug(f"BrainRouter: Connection refused for {url}")
+            return False
+        except httpx.HTTPError as e:
+            logger.warning(f"BrainRouter: HTTP error checking {url}: {e}")
             return False
 
     async def ping_remote(self) -> str:

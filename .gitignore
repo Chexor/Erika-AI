@@ -13,6 +13,7 @@ pip-delete-this-directory.txt
 # Erika Specific
 logs/
 chats/
+reflections/
 chat_archive/
 config/user.json
 _legacy_backup/

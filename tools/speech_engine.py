@@ -1,13 +1,11 @@
-
 import os
 import time
 import sounddevice as sd
 import threading
 import logging
-import uuid
-import torch
-import scipy.io.wavfile
+import glob
 import numpy as np
+from typing import Optional
 
 # Try importing the correct class from pocket_tts
 try:
@@ -17,28 +15,53 @@ except ImportError:
 
 logger = logging.getLogger("TOOLS.SpeechEngine")
 
+# Maximum age of temp files before cleanup (in seconds)
+TEMP_FILE_MAX_AGE = 3600  # 1 hour
+
+
 class SpeechEngine:
     def __init__(self):
         self.output_dir = os.path.join(os.getcwd(), 'erika_home', 'temp')
         os.makedirs(self.output_dir, exist_ok=True)
-            
+
+        # Clean up old temp files on startup
+        self._cleanup_temp_files()
+
         # Initialize TTS
-        self.tts_model = None
-        self.current_voice = 'azelma' # Default voice (Valid options: alba, marius, javert, jean, fantine, cosette, eponine, azelma)
+        self.tts_model: Optional[object] = None
+        self.current_voice = 'azelma'  # Default voice
         self.stop_event = threading.Event()
         self.is_speaking = False
-        self.volume = 1.0 
-        
+        self.volume = 1.0
+        self._speak_lock = threading.Lock()
+
         if TTSModel:
             try:
                 logger.info("Loading PocketTTS Model (this may download weights)...")
-                # Load default model
                 self.tts_model = TTSModel.load_model()
                 logger.info("PocketTTS Model loaded successfully.")
-            except Exception as e:
+            except (ImportError, RuntimeError, OSError) as e:
                 logger.error(f"Failed to init TTSModel: {e}")
         else:
-            logger.error("PocketTTS module not found. Audio will be simulated.")
+            logger.warning("PocketTTS module not found. Audio will be simulated.")
+
+    def _cleanup_temp_files(self):
+        """Removes old temporary files to prevent accumulation."""
+        try:
+            current_time = time.time()
+            cleanup_count = 0
+            for filepath in glob.glob(os.path.join(self.output_dir, '*')):
+                try:
+                    file_age = current_time - os.path.getmtime(filepath)
+                    if file_age > TEMP_FILE_MAX_AGE:
+                        os.remove(filepath)
+                        cleanup_count += 1
+                except OSError as e:
+                    logger.debug(f"Failed to remove temp file {filepath}: {e}")
+            if cleanup_count > 0:
+                logger.info(f"SpeechEngine: Cleaned up {cleanup_count} old temp files")
+        except OSError as e:
+            logger.warning(f"SpeechEngine: Error during temp cleanup: {e}")
 
     def set_voice(self, voice_name: str):
         """Sets the active voice for TTS."""
@@ -57,19 +80,21 @@ class SpeechEngine:
             self.stop_event.set()
             logger.info("SpeechEngine: Stop requested.")
 
-    def speak(self, text: str):
+    def speak(self, text: str) -> bool:
         """Synthesizes text and plays audio asynchronously."""
         if not text:
             return False
-        
-        # Stop any existing playback
-        self.stop()
-        self.stop_event.clear()
-        self.is_speaking = True
-        
-        # Run in thread
-        t = threading.Thread(target=self._speak_thread, args=(text,))
-        t.start()
+
+        with self._speak_lock:
+            # Stop any existing playback
+            self.stop()
+            # Wait a moment for previous thread to notice stop
+            self.stop_event.clear()
+            self.is_speaking = True
+
+            # Run in thread
+            t = threading.Thread(target=self._speak_thread, args=(text,), daemon=True)
+            t.start()
         return True
 
     def _speak_thread(self, text):

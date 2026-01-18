@@ -12,8 +12,14 @@ import uuid
 import datetime
 import json
 import os
+import re
+from typing import Optional, List, Dict, Any, Callable
 
 logger = setup_engine_logger("INTERFACE.Controller")
+
+# Input validation constants
+MAX_INPUT_LENGTH = 50000  # Maximum characters for user input
+LLM_GENERATION_TIMEOUT = 300  # 5 minutes timeout for LLM generation
 
 class Controller:
     def __init__(self, brain: Brain, memory: Memory):
@@ -173,6 +179,16 @@ class Controller:
         self.save_settings()
         logger.info(f"Controller: TTS Autoplay set to {enabled}")
 
+    def _sanitize_text(self, text: str) -> str:
+        """Removes emojis and roleplay actions for UI and TTS safety."""
+        if not text: return ""
+        # Strip *actions* and (parentheticals)
+        clean = re.sub(r'\*.*?\*', '', text)
+        clean = re.sub(r'\(.*?\)', '', clean)
+        # Remove emojis (Keep alphanumeric + basic punctuation)
+        clean = re.sub(r'[^\w\s,.\'?!"-]', '', clean)
+        return clean.strip()
+
     async def toggle_tts(self, msg_id: str, text: str):
         """Toggles TTS for a specific message."""
         # 1. If currently speaking THIS message -> STOP
@@ -186,8 +202,9 @@ class Controller:
             if self.speaking_msg_id:
                 self.speech_engine.stop()
             
+            clean_text = self._sanitize_text(text)
             self.speaking_msg_id = msg_id
-            self.speech_engine.speak(text)
+            self.speech_engine.speak(clean_text)
             logger.info(f"Controller: TTS Started for {msg_id}")
             
         # Refresh to update icons
@@ -275,49 +292,61 @@ class Controller:
             logger.warning(f"Controller: Failed to delete chat {chat_id}")
 
     def build_system_prompt(self) -> str:
-        """Constructs the system prompt with internal memory."""
+        """Constructs the system prompt from Core and Soul files."""
+        base_path = os.path.join("erika_home", "config")
+        core_path = os.path.join(base_path, "system_core.md")
+        soul_path = os.path.join(base_path, "erika_soul.md")
         
-        # 1. Load Persona
-        persona_path = os.path.join("erika_home", "config", "persona.md")
-        if os.path.exists(persona_path):
-            with open(persona_path, 'r', encoding='utf-8') as f:
-                base_persona = f.read()
+        # Load Core
+        if os.path.exists(core_path):
+            with open(core_path, 'r', encoding='utf-8') as f:
+                core_text = f.read()
         else:
-             logger.warning("Controller: Persona file missing. Using fallback.")
-             base_persona = (
-                "You are Erika, an intelligent and empathetic AI assistant. "
-                f"You are chatting with {self.settings.get('username', 'Tim')}. "
-                "Your responses should be natural, concise, and engaging."
-            )
-        
-        # 2. Add Reflection (Internal Memory)
+            core_text = "ERROR: SYSTEM CORE MISSING. ACT AS A HELPFUL ASSISTANT."
+            
+        # Load Soul
+        if os.path.exists(soul_path):
+            with open(soul_path, 'r', encoding='utf-8') as f:
+                soul_text = f.read()
+        else:
+            soul_text = f"You are chatting with {self.settings.get('username', 'User')}."
+            
+        # Load Reflection
         reflection = self.reflector.get_latest_reflection()
-        
-        memory_block = ""
+        reflection_block = ""
         if reflection:
-            memory_block = (
-                "\n### INTERNAL MEMORY (DO NOT REPEAT VERBATIM) ###\n"
-                f"LIBRARIAN REFLECTION (Your Subconscious):\n{reflection}\n"
+            reflection_block = (
+                "\n### INTERNAL MEMORY: YESTERDAY'S PERSPECTIVE ###\n"
+                f"{reflection}\n"
                 "### END MEMORY ###\n"
-                "Use the Internal Memory to inform your tone and first greeting, "
-                "but act naturally, as if you just woke up with these thoughts."
             )
-            
-        strict_rules = (
-            "\n\n### STRICT FORMATTING RULES ###\n"
-            "1. NO ROLEPLAY TAGS: Do not use *asterisks* or (parentheses) for actions.\n"
-            "2. NO EMOJIS: NEVER use emojis or symbols (e.g. 😊). They break the audio engine.\n"
-            "3. NATURAL SPEECH: Convey tone through words only. Use contractions (don't, it's).\n"
-            "4. NO ROBOTIC MANNERISMS: Do not say 'How can I assist you'. Just talk to him."
-        )
-            
-        return base_persona + memory_block + strict_rules
+
+        return f"{core_text}\n\n{soul_text}\n\n{reflection_block}"
+
+    async def _generate_with_timeout(self, model: str, messages: list, host: str, options: dict):
+        """Async generator wrapper for LLM generation."""
+        async for chunk in self.brain.generate_response(model=model, messages=messages, host=host, options=options):
+            yield chunk
 
     async def handle_user_input(self, content: str):
         """Processes user input."""
+        # Input validation
+        if not content or not content.strip():
+            logger.warning("Controller: Empty input received, ignoring")
+            return
+
+        if len(content) > MAX_INPUT_LENGTH:
+            logger.warning(f"Controller: Input too long ({len(content)} chars), truncating to {MAX_INPUT_LENGTH}")
+            content = content[:MAX_INPUT_LENGTH]
+
+        # Check for null bytes or control characters (security)
+        if '\x00' in content:
+            logger.warning("Controller: Null byte in input, sanitizing")
+            content = content.replace('\x00', '')
+
         if not self.current_chat_id:
             self.new_chat()
-            
+
         # 1. Add User Message
         user_msg = {"role": "user", "content": content, "id": uuid.uuid4().hex}
         self.chat_history.append(user_msg)
@@ -352,29 +381,46 @@ class Controller:
         # Stream response
         full_response = ""
         model_to_use = self.brain_router.LOCAL_MODEL
+        target_node_alias = 'local'
         if target_node == 'remote':
-             model_to_use = self.brain_router.REMOTE_MODEL
-        
-        async for chunk in self.brain.generate_response(model=model_to_use, messages=context_messages, host=target_url):
-            # Ollama chunk format: {'message': {'role': 'assistant', 'content': '...'}, 'done': False}
-            if "message" in chunk:
-                msg_obj = chunk['message']
-                
-                content_bit = ""
-                if isinstance(msg_obj, dict):
-                    content_bit = msg_obj.get('content', '')
-                elif hasattr(msg_obj, 'content'):
-                     content_bit = msg_obj.content
+            model_to_use = self.brain_router.REMOTE_MODEL
+            target_node_alias = 'remote'
 
-                full_response += content_bit
-                assistant_msg['content'] = full_response
-                
-                # Targeted Update (No Flash)
-                await self._safe_stream(assistant_msg['id'], full_response)
-            
-            elif "error" in chunk:
-                 assistant_msg['content'] = f"Error: {chunk['error']}"
-                 await self._safe_refresh()
+        # Fetch Hardware-Specific Options
+        gen_options = self.brain_router.get_model_options(target_node_alias)
+        logger.info(f"Controller: Using Options: {gen_options}")
+
+        try:
+            async for chunk in asyncio.wait_for(
+                self._generate_with_timeout(model_to_use, context_messages, target_url, gen_options),
+                timeout=LLM_GENERATION_TIMEOUT
+            ):
+                # Ollama chunk format: {'message': {'role': 'assistant', 'content': '...'}, 'done': False}
+                if "message" in chunk:
+                    msg_obj = chunk['message']
+
+                    content_bit = ""
+                    if isinstance(msg_obj, dict):
+                        content_bit = msg_obj.get('content', '')
+                    elif hasattr(msg_obj, 'content'):
+                        content_bit = msg_obj.content
+
+                    # Accumulate raw, sanitize for display
+                    full_response += content_bit
+                    clean_response = self._sanitize_text(full_response)
+
+                    assistant_msg['content'] = clean_response
+
+                    # Targeted Update (No Flash)
+                    await self._safe_stream(assistant_msg['id'], clean_response)
+
+                elif "error" in chunk:
+                    assistant_msg['content'] = f"Error: {chunk['error']}"
+                    await self._safe_refresh()
+        except asyncio.TimeoutError:
+            logger.error(f"Controller: LLM generation timed out after {LLM_GENERATION_TIMEOUT}s")
+            assistant_msg['content'] = full_response + "\n\n[Generation timed out]"
+            await self._safe_refresh()
 
         # Final Refresh to ensure complete message consistency
         await self._safe_refresh()
