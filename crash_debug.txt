@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "S:\Code_Workspace\Erika-AI\interface\controller.py", line 406, in handle_user_input
+    async for chunk in asyncio.wait_for(
+TypeError: 'async for' requires an object with __aiter__ method, got coroutine

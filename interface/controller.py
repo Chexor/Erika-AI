@@ -21,6 +21,7 @@ logger = setup_engine_logger("INTERFACE.Controller")
 # Input validation constants
 MAX_INPUT_LENGTH = 50000  # Maximum characters for user input
 LLM_GENERATION_TIMEOUT = 300  # 5 minutes timeout for LLM generation
+CONTEXT_HEADROOM_TOKENS = 512  # Reserve space for completion
 
 class Controller:
     def __init__(self, brain: Brain, memory: Memory):
@@ -176,8 +177,8 @@ class Controller:
         self.save_settings()
         logger.info(f"Controller: TTS Autoplay set to {enabled}")
 
-    def _sanitize_text(self, text: str) -> str:
-        """Removes emojis and roleplay actions for UI and TTS safety."""
+    def _sanitize_for_tts(self, text: str) -> str:
+        """Removes emojis and roleplay actions for TTS safety only."""
         if not text: return ""
         # Strip *actions* and (parentheticals)
         clean = re.sub(r'\*.*?\*', '', text)
@@ -199,7 +200,7 @@ class Controller:
             if self.speaking_msg_id:
                 self.speech_engine.stop()
             
-            clean_text = self._sanitize_text(text)
+            clean_text = self._sanitize_for_tts(text)
             self.speaking_msg_id = msg_id
             self.speech_engine.speak(clean_text)
             logger.info(f"Controller: TTS Started for {msg_id}")
@@ -327,9 +328,42 @@ class Controller:
 
         return f"{core_text}\n\n{soul_text}\n\n{growth_text}\n\n{reflection_block}"
 
+    def _calc_context_target(self, max_tokens: int) -> int:
+        """Returns the target max tokens for the prompt after headroom."""
+        if not max_tokens or max_tokens <= 0:
+            return 0
+        headroom = min(CONTEXT_HEADROOM_TOKENS, max_tokens // 4)
+        return max(256, max_tokens - headroom)
+
+    def _trim_context_messages(self, messages: list, max_tokens: int) -> tuple[list, bool]:
+        """Trims oldest messages to fit within max_tokens."""
+        if not messages or max_tokens <= 0:
+            return messages, False
+
+        trimmed = list(messages)
+        while len(trimmed) > 1 and self.token_counter.count_messages(trimmed) > max_tokens:
+            if trimmed[0].get("role") == "system" and len(trimmed) > 2:
+                trimmed.pop(1)
+            else:
+                trimmed.pop(0)
+
+        return trimmed, len(trimmed) != len(messages)
+
     async def _generate_with_timeout(self, model: str, messages: list, host: str, options: dict):
-        """Async generator wrapper for LLM generation."""
-        async for chunk in self.brain.generate_response(model=model, messages=messages, host=host, options=options):
+        """Async generator wrapper for LLM generation with a per-chunk timeout."""
+        gen = self.brain.generate_response(model=model, messages=messages, host=host, options=options)
+        while True:
+            try:
+                chunk = await asyncio.wait_for(gen.__anext__(), timeout=LLM_GENERATION_TIMEOUT)
+            except StopAsyncIteration:
+                break
+            except asyncio.TimeoutError:
+                try:
+                    await gen.aclose()
+                except Exception:
+                    pass
+                yield {"error": f"Generation timed out after {LLM_GENERATION_TIMEOUT}s"}
+                break
             yield chunk
 
     async def handle_user_input(self, content: str):
@@ -355,10 +389,9 @@ class Controller:
         user_msg = {"role": "user", "content": content, "id": uuid.uuid4().hex}
         self.chat_history.append(user_msg)
         
-        # Log Prompt Tokens
-        prompt_tokens = self.token_counter.count_messages(self.chat_history)
-        self.current_token_count = prompt_tokens
-        logger.info(f"Controller: User Input Received. Current Context Tokens: {prompt_tokens}")
+        # Log Prompt Tokens (raw history before trimming)
+        raw_prompt_tokens = self.token_counter.count_messages(self.chat_history)
+        logger.info(f"Controller: User Input Received. Raw Context Tokens: {raw_prompt_tokens}")
 
         await self._safe_refresh()
             
@@ -378,6 +411,15 @@ class Controller:
         # Build Context (System + History)
         system_prompt = self.build_system_prompt()
         context_messages = [{"role": "system", "content": system_prompt}] + self.chat_history[:-1]
+
+        # Trim context to fit target window
+        max_ctx = self.settings.get('context_window', 8192)
+        target_ctx = self._calc_context_target(max_ctx)
+        context_messages, trimmed = self._trim_context_messages(context_messages, target_ctx)
+        prompt_tokens = self.token_counter.count_messages(context_messages)
+        self.current_token_count = prompt_tokens
+        if trimmed:
+            logger.warning("Controller: Context trimmed to fit the context window.")
         
         # Initial Refresh to show the empty bubble
         await self._safe_refresh()
@@ -395,10 +437,9 @@ class Controller:
         logger.info(f"Controller: Using Options: {gen_options}")
 
         try:
-            async for chunk in asyncio.wait_for(
-                self._generate_with_timeout(model_to_use, context_messages, target_url, gen_options),
-                timeout=LLM_GENERATION_TIMEOUT
-            ):
+            # Direct iteration - asyncio.wait_for cannot wrap an async generator for 'async for'
+            async for chunk in self._generate_with_timeout(model_to_use, context_messages, target_url, gen_options):
+                
                 # Ollama chunk format: {'message': {'role': 'assistant', 'content': '...'}, 'done': False}
                 if "message" in chunk:
                     msg_obj = chunk['message']
@@ -409,22 +450,29 @@ class Controller:
                     elif hasattr(msg_obj, 'content'):
                         content_bit = msg_obj.content
 
-                    # Accumulate raw, sanitize for display
+                    # Accumulate raw output
                     full_response += content_bit
-                    clean_response = self._sanitize_text(full_response)
 
-                    assistant_msg['content'] = clean_response
+                    assistant_msg['content'] = full_response
 
                     # Targeted Update (No Flash)
-                    await self._safe_stream(assistant_msg['id'], clean_response)
+                    await self._safe_stream(assistant_msg['id'], full_response)
 
                 elif "error" in chunk:
                     assistant_msg['content'] = f"Error: {chunk['error']}"
                     await self._safe_refresh()
-        except asyncio.TimeoutError:
-            logger.error(f"Controller: LLM generation timed out after {LLM_GENERATION_TIMEOUT}s")
-            assistant_msg['content'] = full_response + "\n\n[Generation timed out]"
-            await self._safe_refresh()
+        except Exception as e:
+                logger.error(f"Controller: Generation check failed: {e}")
+                # Fallback if needed, but the loop is now safe from the async error
+                if not full_response:
+                    assistant_msg['content'] = f"Error during generation: {str(e)}"
+                    await self._safe_refresh()
+
+        # Append a brief notice if trimming occurred
+        if trimmed:
+            assistant_msg['content'] = (
+                f"{assistant_msg['content']}\n\nNote: earlier messages were trimmed to fit the context window."
+            )
 
         # Final Refresh to ensure complete message consistency
         await self._safe_refresh()
@@ -434,7 +482,7 @@ class Controller:
         
         # Auto-read
         if self.settings.get('tts_autoplay'):
-             await self.toggle_tts(assistant_msg['id'], assistant_msg['content'])
+                await self.toggle_tts(assistant_msg['id'], assistant_msg['content'])
         
         # Log Completion Tokens
         final_tokens = self.token_counter.count_messages(self.chat_history)
@@ -463,8 +511,7 @@ class Controller:
             "Older": []
         }
         
-        now = datetime.datetime.now()
-        today = now.date()
+        today = TimeKeeper.get_logical_date()
         yesterday = today - datetime.timedelta(days=1)
         last_week = today - datetime.timedelta(days=7)
         
@@ -476,13 +523,13 @@ class Controller:
                 
             try:
                 dt = datetime.datetime.fromisoformat(created_at_str)
-                date = dt.date()
+                logical_date = TimeKeeper.get_date_from_datetime(dt)
                 
-                if date == today:
+                if logical_date == today:
                     groups["Today"].append(chat)
-                elif date == yesterday:
+                elif logical_date == yesterday:
                     groups["Yesterday"].append(chat)
-                elif date > last_week:
+                elif logical_date > last_week:
                     groups["This Week"].append(chat)
                 else:
                     groups["Older"].append(chat)

@@ -21,9 +21,13 @@ class SafeTools:
 
     def _is_safe_path(self, path: str) -> bool:
         """Ensures path is within context_root."""
-        # Simple path traversal check
+        if os.path.isabs(path):
+            return False
         abs_path = os.path.abspath(os.path.join(self.context_root, path))
-        return abs_path.startswith(self.context_root)
+        try:
+            return os.path.commonpath([self.context_root, abs_path]) == self.context_root
+        except ValueError:
+            return False
 
     def get_time(self) -> str:
         """Returns the current server time."""

@@ -27,9 +27,9 @@ class TestModuleImports(unittest.TestCase):
         from engine.logger import setup_engine_logger
         self.assertIsNotNone(setup_engine_logger)
 
-    def test_engine_modules_reflector(self):
-        from engine.modules.reflector import Reflector
-        self.assertIsNotNone(Reflector)
+    def test_domain_reflection_service(self):
+        from domain.subconscious.reflection_service import ReflectionService
+        self.assertIsNotNone(ReflectionService)
 
     def test_engine_modules_system_monitor(self):
         from engine.modules.system_monitor import SystemMonitor

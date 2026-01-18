@@ -27,7 +27,7 @@ class Memory:
     def create_chat(self) -> Dict[str, Any]:
         """Creates a new chat session metadata (does not save to disk)."""
         chat_id = str(uuid.uuid4())
-        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        timestamp = datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat()
         
         logger.info(f"Created new chat session: {chat_id}")
         return {

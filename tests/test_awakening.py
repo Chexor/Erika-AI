@@ -10,7 +10,7 @@ except ImportError:
     ReflectionService = None
     Controller = None
 
-class TestAwakening(unittest.IsolatedAsyncioTestCase):
+class TestAwakening(unittest.TestCase):
     
     def test_get_latest_reflection(self):
         """Verify retrieving the correct reflection file."""
@@ -26,7 +26,7 @@ class TestAwakening(unittest.IsolatedAsyncioTestCase):
                 # Should prefer 18-01 (latest)
                 mock_file.assert_called()
 
-    async def test_system_prompt_injection(self):
+    def test_system_prompt_injection(self):
         """Verify system prompt contains the Yesterday's Perspective reflection."""
         if not Controller: self.skipTest("No Controller")
 
@@ -34,9 +34,10 @@ class TestAwakening(unittest.IsolatedAsyncioTestCase):
         mock_service = MagicMock()
         mock_service.get_latest_reflection.return_value = "Tim was happy."
 
-        # The Controller init sets up its own instances, we overwrite them for testing
-        controller = Controller(MagicMock(), MagicMock())
-        controller.reflection_service = mock_service
+        # The Controller init starts SystemMonitor; patch it to avoid asyncio slow warnings
+        with patch('interface.controller.SystemMonitor.start'):
+            controller = Controller(MagicMock(), MagicMock())
+            controller.reflection_service = mock_service
 
         # We assume a method build_system_prompt exists
         prompt = controller.build_system_prompt()

@@ -1,8 +1,8 @@
 # Erika Codebase Summary
 
-## 1. Four-Layer Architecture
+## 1. Five-Layer Architecture
 
-The system is strictly divided into four layers to ensure separation of concerns and modularity.
+The system is strictly divided into five layers to ensure separation of concerns and modularity.
 
 ### 1. ENGINE (Backend)
 *   **Directory:** `engine/`
@@ -17,10 +17,16 @@ The system is strictly divided into four layers to ensure separation of concerns
 *   **Directory:** `engine/modules/`
 *   **Purpose:** Pluggable extensions implementing specific capabilities.
 *   **Key Components:**
-    *   `reflector.py`: Manages Daily Reflections and Personality Evolution.
     *   `time_keeper.py`: Enforces the 5 AM logical day rollover.
 
-### 3. INTERFACE (MVC)
+### 3. DOMAIN (Subconscious)
+*   **Directory:** `domain/subconscious/`
+*   **Purpose:** Long-term reflection and personality evolution.
+*   **Key Components:**
+    *   `reflection_service.py`: Generates daily reflections.
+    *   `growth_service.py`: Evolves personality traits from reflections.
+
+### 4. INTERFACE (MVC)
 *   **Directory:** `interface/`
 *   **Purpose:** User interaction and presentation via NiceGUI.
 *   **Components:**
@@ -29,7 +35,7 @@ The system is strictly divided into four layers to ensure separation of concerns
     *   **Settings (`settings_ui.py`):** Logic for the settings modal.
     *   **Tray (`tray.py`):** System Tray integration (pystray).
 
-### 4. ASSEMBLER (Entry Point)
+### 5. ASSEMBLER (Entry Point)
 *   **File:** `main.py`
 *   **Purpose:** Bootstraps the application.
 *   **Responsibility:**
@@ -44,34 +50,38 @@ The system is strictly divided into four layers to ensure separation of concerns
 
 ```text
 Erika-AI/
-├── assets/               # Static resources (Icons, Logos)
-├── engine/               # Headless Core (Backend)
-│   ├── brain.py
-│   ├── logger.py
-│   ├── memory.py
-│   ├── network_router.py # Distributed Brain Router
-│   └── modules/          # Sub-systems
-│       ├── system_monitor.py
-│       ├── token_counter.py
-│       ├── time_keeper.py # Circadian Clock
-│       └── reflector.py   # Narrative Engine (Reflections & Growth)
-├── erika_home/           # Persona & Long-term Data
-│   ├── config/
-│   │   ├── system_core.md   # The Law (TTS Safety)
-│   │   ├── erika_soul.md    # The Vibe (User Settings)
-│   │   └── erika_growth.md  # The Journey (Auto-Evolving)
-│   └── reflections/
-├── interface/            # MVC Layer
-│   ├── view.py           # View (NiceGUI Components)
-│   ├── controller.py     # Controller (Logic & State)
-│   ├── settings_ui.py    # Settings Modal
-│   └── tray.py           # System Tray
-├── logs/                 # Runtime logs (ignored by git)
-├── tests/                # Verification Layer
-├── main.py               # Assembler
-├── GEMINI.md             # Governance Protocol
-└── codebase_overview.md  # This file
+|-- assets/               # Static resources (Icons, Logos)
+|-- engine/               # Headless Core (Backend)
+|   |-- brain.py
+|   |-- logger.py
+|   |-- memory.py
+|   |-- network_router.py # Distributed Brain Router
+|   `-- modules/          # Sub-systems
+|       |-- system_monitor.py
+|       |-- token_counter.py
+|       `-- time_keeper.py # Circadian Clock
+|-- domain/               # Subconscious layer
+|   `-- subconscious/
+|       |-- reflection_service.py
+|       `-- growth_service.py
+|-- erika_home/           # Persona & Long-term Data
+|   |-- config/
+|   |   |-- system_core.md   # The Law (TTS Safety)
+|   |   |-- erika_soul.md    # The Vibe (User Settings)
+|   |   `-- erika_growth.md  # The Journey (Auto-Evolving)
+|   `-- reflections/
+|-- interface/            # MVC Layer
+|   |-- view.py           # View (NiceGUI Components)
+|   |-- controller.py     # Controller (Logic & State)
+|   |-- settings_ui.py    # Settings Modal
+|   `-- tray.py           # System Tray
+|-- logs/                 # Runtime logs (ignored by git)
+|-- tests/                # Verification Layer
+|-- main.py               # Assembler
+|-- GEMINI.md             # Governance Protocol
+`-- codebase_overview.md  # This file
 ```
+
 
 ## 3. TDD Flow (Red-Green-Refactor)
 
