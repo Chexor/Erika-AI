@@ -11,7 +11,7 @@ class StatusDashboard:
                  with ui.row().classes('items-center gap-3'):
                      ui.icon('monitor_heart', size='sm').classes('text-blue-400')
                      ui.label('System Status Dashboard').classes('text-lg font-medium text-white')
-                 ui.button(icon='close', on_click=self.dialog.close).props('flat round dense text-color=grey')
+                 ui.button(icon='close', on_click=self.dialog.close).props('flat round dense').classes('text-gray-500 hover:text-white transition-colors')
              
              # Content
              self.content_area = ui.column().classes('w-full p-6 gap-6')

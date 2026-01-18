@@ -5,6 +5,7 @@ from engine.modules.token_counter import TokenCounter
 from tools.speech_engine import SpeechEngine
 from engine.network_router import BrainRouter
 from engine.modules.time_keeper import TimeKeeper
+from engine.mcp_manager import McpManager
 from domain.subconscious.reflection_service import ReflectionService
 from domain.subconscious.growth_service import GrowthService
 import asyncio
@@ -51,6 +52,9 @@ class Controller:
         
         # Brain Router (Distributed)
         self.brain_router = BrainRouter()
+        
+        # MCP Manager (Centralized Tools)
+        self.mcp_manager = McpManager()
         
         # Subconscious Domain Services
         self.reflection_service = ReflectionService(self.brain, self.memory, self.brain_router)
@@ -121,8 +125,16 @@ class Controller:
         logger.info("Controller: Running startup network checks...")
         await self.brain_router.update_status()
         
-        # Start Speech Engine (Connects if MCP)
+        # Start MCP Manager
+        await self.mcp_manager.start_all()
+        
+        # Start Speech Engine
         if hasattr(self.speech_engine, 'start'):
+             # Verify if we need to inject the MCP session
+             if hasattr(self.speech_engine, 'set_mcp_session'):
+                 session = self.mcp_manager.get_session('voice')
+                 self.speech_engine.set_mcp_session(session)
+             
              await self.speech_engine.start()
              
         self._startup_done = True
@@ -187,32 +199,8 @@ class Controller:
         }
         
         # 3. MCP Servers
-        # Currently we only track TTS explicitly as a managed service
-        mcp_list = []
-        
-        # TTS Service
-        tts_mode = self.settings.get('tts_backend', 'edge')
-        if tts_mode == 'mcp':
-             # We can check the client readiness
-             is_ready = False
-             detail = "Connecting..."
-             if hasattr(self.speech_engine, 'is_ready'):
-                 is_ready = self.speech_engine.is_ready()
-                 detail = "Ready" if is_ready else "Not Ready"
-             
-             mcp_list.append({
-                 'name': 'TTS Engine (MCP)', 
-                 'status': 'ok' if is_ready else 'error',
-                 'detail': detail
-             })
-        else:
-             mcp_list.append({
-                 'name': 'TTS Engine (Edge)', 
-                 'status': 'ok',
-                 'detail': 'Internal Service'
-             })
-             
-        stats['mcp'] = mcp_list
+        # Delegated to Manager
+        stats['mcp'] = self.mcp_manager.get_status()
         return stats
     
     def set_username(self, name: str):

@@ -1,0 +1,16 @@
+{
+    "servers": {
+        "voice": {
+            "command": "python",
+            "args": [
+                "-m",
+                "mcp_tools.erika_voice.server"
+            ],
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            },
+            "enabled": true,
+            "auto_start": true
+        }
+    }
+}

@@ -21,15 +21,19 @@ class McpTtsClient:
         self.volume = 1.0
         self.stop_event = asyncio.Event() 
         
+    def set_session(self, session: ClientSession):
+        """Injects an existing MCP session."""
+        self.session = session
+
     async def start(self):
         """Starts the client. Must be called inside a running loop."""
         try:
             self._loop = asyncio.get_running_loop()
         except RuntimeError:
-            logger.warning("No running loop found during start(). creating new one (risky).")
             self._loop = asyncio.new_event_loop()
             
-        await self.connect()
+        if not self.session:
+             await self.connect()
         
     async def connect(self):
         logger.info("Connecting to MCP TTS Server...")
@@ -113,3 +117,7 @@ class McpTtsClient:
     def tts_model(self):
         # We pretend we have one to satisfy checks (e.g. system start)
         return True
+        
+    def is_ready(self) -> bool:
+        """Returns True if the MCP session is active."""
+        return self.session is not None

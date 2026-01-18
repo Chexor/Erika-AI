@@ -374,8 +374,11 @@ def build_settings_modal(controller):
     Builds and returns the Settings Modal dialog using the configuration dictionary.
     """
     with ui.dialog() as settings_dialog:
-        with ui.card().classes('glass-panel w-full max-w-6xl h-[90vh] p-0 flex flex-row overflow-hidden border border-white/10 rounded-xl'):
+        with ui.card().classes('glass-panel w-full max-w-6xl h-[90vh] p-0 flex flex-row overflow-hidden border border-white/10 rounded-xl relative'):
             
+            # Close Button
+            ui.button(icon='close', on_click=settings_dialog.close).props('flat round dense').classes('absolute top-4 right-4 z-50 text-gray-500 hover:text-white transition-colors')
+
             # --- LEFT NAV ---
             with ui.column().classes('w-64 h-full bg-black/20 p-6 flex-shrink-0 border-r border-white/5 gap-2'):
                 ui.label('Settings').classes('text-xl font-bold text-gray-100 mb-6 tracking-tight')

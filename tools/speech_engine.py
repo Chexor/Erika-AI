@@ -12,6 +12,11 @@ class SpeechEngine:
     def __init__(self):
         self._service = TTSService()
 
+    def set_mcp_session(self, session):
+        """Injects session into the MCP client backend."""
+        if hasattr(self.backend, 'set_session'):
+            self.backend.set_session(session)
+
     async def start(self):
         """No-op for local engine, maintained for interface compatibility."""
         pass
