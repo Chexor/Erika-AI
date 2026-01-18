@@ -1,7 +1,7 @@
 import logging
 import threading
 from typing import Optional, Callable
-from tools.tts_service import TTSService, TEMP_FILE_MAX_AGE
+from mcp_tools.erika_voice.service import TTSService, TEMP_FILE_MAX_AGE
 
 logger = logging.getLogger("TOOLS.SpeechEngine")
 

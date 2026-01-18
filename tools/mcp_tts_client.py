@@ -33,7 +33,7 @@ class McpTtsClient:
         
     async def connect(self):
         logger.info("Connecting to MCP TTS Server...")
-        script = os.path.join(os.getcwd(), 'mcp_servers', 'tts_server', 'server.py')
+        script = os.path.join(os.getcwd(), 'mcp_tools', 'erika_voice', 'server.py')
         
         # Use python executable
         server_params = StdioServerParameters(

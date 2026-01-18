@@ -2,15 +2,8 @@ import logging
 import asyncio
 import sys
 import os
-
-# Ensure project root is in path so we can import tools
-# This script is at mcp_servers/tts_server/server.py
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 from mcp.server.fastmcp import FastMCP
-from tools.tts_service import TTSService
+from .service import TTSService
 
 # Initialize Service
 # Note: In a real server, we might want this to be lazy or persistent. 
