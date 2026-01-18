@@ -63,14 +63,29 @@ class ReflectionService:
         remote_model = self.router.REMOTE_MODEL
         
         full_response = ""
+        generation_error = False
+        
         try:
             async for chunk in self.brain.generate_response(
                 model=remote_model, 
                 messages=[{"role": "user", "content": prompt}], 
                 host=remote_host
             ):
+                if "error" in chunk:
+                     logger.error(f"ReflectionService: Brain returned error: {chunk['error']}")
+                     generation_error = True
+                     break
+                     
                 if "message" in chunk:
                     full_response += chunk['message'].get('content', '')
+                    
+            # Check for validation failures
+            if generation_error:
+                return "Failed", None
+            if not full_response or not full_response.strip():
+                logger.warning("ReflectionService: Generated content came back empty. Aborting save.")
+                return "Failed", None
+                
         except Exception as e:
             logger.error(f"ReflectionService: Generation failed: {e}")
             return "Failed", None

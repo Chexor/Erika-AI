@@ -32,6 +32,7 @@ class Controller:
         self.chat_history = []  # In-memory messages for UI
         self.refresh_ui_callback = None
         self.speaking_msg_id = None # Tracks active TTS message
+        self._is_reflecting = False # Guard for re-entrancy
         
         # System Monitor
         self.system_monitor = SystemMonitor()
@@ -95,25 +96,35 @@ class Controller:
 
     async def check_legacy_reflection(self):
         """Checks if we need to generate a reflection for yesterday."""
-        # Current logical date
-        today = TimeKeeper.get_logical_date()
-        yesterday = today - datetime.timedelta(days=1)
-        
-        # Check if file exists
-        fname = f"day_{yesterday.strftime('%d-%m-%Y')}.md"
-        fpath = os.path.join("erika_home", "reflections", fname)
-        
-        if not os.path.exists(fpath):
-            logger.info("Controller: Yesterday's reflection missing. Attempting generation...")
-            # We can't block startup, but this is an async task so it's fine
-            status, content = await self.reflection_service.reflect_on_day(yesterday)
-            logger.info(f"Controller: Reflection Task Status: {status}")
+        if self._is_reflecting:
+            logger.info("Controller: Reflection already in progress. Skipping heartbeat check.")
+            return
+
+        try:
+            self._is_reflecting = True
+            # Current logical date
+            today = TimeKeeper.get_logical_date()
+            yesterday = today - datetime.timedelta(days=1)
             
-            # If successful, trigger growth
-            if status == "Completed" and content:
-                 await self.growth_service.evolve(content)
-        else:
-             logger.info("Controller: Reflection for yesterday exists.")
+            # Check if file exists
+            fname = f"day_{yesterday.strftime('%d-%m-%Y')}.md"
+            fpath = os.path.join("erika_home", "reflections", fname)
+            
+            if not os.path.exists(fpath):
+                logger.info("Controller: Yesterday's reflection missing. Attempting generation...")
+                # We can't block startup, but this is an async task so it's fine
+                status, content = await self.reflection_service.reflect_on_day(yesterday)
+                logger.info(f"Controller: Reflection Task Status: {status}")
+                
+                # If successful, trigger growth
+                if status == "Completed" and content:
+                     await self.growth_service.evolve(content)
+            else:
+                 logger.info("Controller: Reflection for yesterday exists.")
+        except Exception as e:
+            logger.error(f"Controller: Error during reflection check: {e}")
+        finally:
+            self._is_reflecting = False
 
     def get_logical_date_str(self):
         return TimeKeeper.get_logical_date().strftime('%a, %d %b')
