@@ -32,12 +32,14 @@ def build_ui(controller: Controller):
                 --accent-primary: """ + accent_color + """;
                 --text-primary: #e2e8f0;
                 --text-secondary: #94a3b8;
+                --base-font-size: """ + str(controller.settings.get('font_size', 14)) + """px;
             }
 
             body {
                 background-color: var(--bg-deep);
                 color: var(--text-primary);
                 font-family: 'Inter', sans-serif;
+                font-size: var(--base-font-size);
                 overflow: hidden;
                 margin: 0;
             }
@@ -100,6 +102,7 @@ def build_ui(controller: Controller):
                 border: none;
                 outline: none;
                 font-size: 0.95rem;
+                padding: 0 12px;
             }
             .input-field .q-field__native {
                 color: var(--text-primary);
@@ -202,7 +205,7 @@ def build_ui(controller: Controller):
                 # --- AI AVATAR (Left) ---
                 if not is_user:
                     with ui.column().classes('items-end justify-start'):
-                         ui.image('/assets/ErikaLogo_v3.png').classes('w-10 h-10 rounded-full object-contain bg-black/20 p-1 border border-white/5')
+                         ui.image('/assets/ErikaLogo_small.png').classes('w-10 h-10 rounded-full object-contain bg-black/20 p-1 border border-white/5')
 
                 # --- MESSAGE COLUMN (Bubble + Actions) ---
                 width_cls = 'max-w-[75%]' # Limit width
@@ -453,7 +456,11 @@ def build_ui(controller: Controller):
         ui.colors(primary=color)
         await ui.run_javascript(f"document.documentElement.style.setProperty('--accent-primary', '{color}')")
 
-    controller.bind_view(refresh_view, update_stream, update_theme)
+    async def update_font(size: int):
+        """Updates the font size dynamically."""
+        await ui.run_javascript(f"document.documentElement.style.setProperty('--base-font-size', '{size}px')")
+
+    controller.bind_view(refresh_view, update_stream, update_theme, update_font)
     ui.timer(0.1, refresh_view, once=True)
     ui.timer(0.1, controller.startup, once=True)
     ui.timer(60.0, controller.startup) # Heartbeat

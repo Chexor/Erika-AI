@@ -15,6 +15,11 @@ import json
 import os
 import re
 import logging
+import sys
+try:
+    import winreg
+except ImportError:
+    winreg = None
 from typing import Optional, List, Dict, Any, Callable
 
 logger = logging.getLogger("interface.controller")
@@ -39,6 +44,7 @@ class Controller:
         self.chat_history = []  # In-memory messages for UI
         self.refresh_ui_callback = None
         self.theme_update_callback = None # Callback for dynamic theming
+        self.font_update_callback = None # Callback for dynamic font
         self.speaking_msg_id = None # Tracks active TTS message
         self._is_reflecting = False # Guard for re-entrancy
         
@@ -105,6 +111,24 @@ class Controller:
             except Exception as e:
                 logger.error(f"Controller: Failed to load settings: {e}")
                  
+        # Sync LLM Context from llm_config.json (Master Source)
+        try:
+            ctx_val = self.brain_router.llm_config.get("consciousness_5070ti", {}).get("options", {}).get("num_ctx")
+            if ctx_val:
+                defaults['context_window'] = ctx_val
+                logger.info(f"Controller: Context Window synced from llm_config.json: {ctx_val}")
+        except Exception:
+            pass
+
+        # Sync Soul with Settings
+        soul_path = os.path.join("erika_home", "config", "erika_soul.md")
+        if os.path.exists(soul_path):
+            try:
+                with open(soul_path, 'r', encoding='utf-8') as f:
+                    defaults['persona_prompt'] = f.read()
+            except Exception:
+                pass
+
         return defaults
 
     def save_settings(self):
@@ -182,7 +206,8 @@ class Controller:
         stats = self.system_monitor.get_system_health()
         if stats:
              stats['tokens_curr'] = self.current_token_count
-             stats['tokens_max'] = self.settings.get('context_window', 8192)
+             # Dynamic Context Window from BrainRouter
+             stats['tokens_max'] = self.brain_router.llm_config.get("consciousness_5070ti", {}).get("options", {}).get("num_ctx", 8192)
         return stats
 
     def get_extended_status(self) -> dict:
@@ -216,6 +241,63 @@ class Controller:
                  self.refresh_ui_callback()
 
     
+    def set_font_size(self, size: float):
+        """Updates font size."""
+        self.settings['font_size'] = int(size)
+        self.save_settings()
+        
+        if self.font_update_callback:
+             if asyncio.iscoroutinefunction(self.font_update_callback):
+                 asyncio.create_task(self.font_update_callback(int(size)))
+             else:
+                 self.font_update_callback(int(size))
+
+    def set_run_on_startup(self, enabled: bool):
+        """Toggles run on startup via Registry."""
+        self.settings['run_on_startup'] = enabled
+        self.save_settings()
+        if winreg:
+            self._update_registry_run(enabled)
+            
+    def set_always_on_top(self, enabled: bool):
+        """Updates always on top setting."""
+        self.settings['always_on_top'] = enabled
+        self.save_settings()
+        # Requires restart to take effect on window, but saved for next spawn.
+        logger.info(f"Controller: Always on top set to {enabled}. Restart required.")
+
+    def _update_registry_run(self, enabled: bool):
+        """Updates Windows Registry for startup."""
+        try:
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            app_name = "ErikaAI"
+            
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
+            try:
+                if enabled:
+                    script = os.path.abspath(sys.argv[0])
+                    # If running as script
+                    if script.endswith('.py'):
+                        python = sys.executable.replace("python.exe", "pythonw.exe") 
+                        if not os.path.exists(python): python = sys.executable
+                        cmd = f'"{python}" "{script}"'
+                    else:
+                        # Frozen exe
+                        cmd = f'"{script}"'
+                        
+                    winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, cmd)
+                    logger.info("Controller: Added to startup registry.")
+                else:
+                    try:
+                        winreg.DeleteValue(key, app_name)
+                        logger.info("Controller: Removed from startup registry.")
+                    except FileNotFoundError:
+                        pass
+            finally:
+                winreg.CloseKey(key)
+        except Exception as e:
+            logger.error(f"Controller: Registry update failed: {e}")
+
     def set_accent_color(self, color: str):
         """Updates the accent color and triggers theme refresh."""
         self.settings['accent_color'] = color
@@ -258,10 +340,16 @@ class Controller:
             logger.error(f"Controller: Failed to save erika_soul.md: {e}")
 
     def set_context_window(self, tokens: int):
-        """Updates the context window setting."""
+        """Updates the context window setting in both user.json and llm_config.json."""
         self.settings['context_window'] = tokens
         self.save_settings()
-        logger.info(f"Controller: Context Window updated to {tokens} tokens")
+        
+        # Update LLM Config (Master Source)
+        self.brain_router.set_model_option("consciousness_5070ti", "num_ctx", tokens)
+        self.brain_router.set_model_option("subconscious_3060", "num_ctx", tokens)
+        self.brain_router.save_config()
+        
+        logger.info(f"Controller: Context Window updated to {tokens} tokens in both config files.")
 
     def set_tts_voice(self, voice: str):
         """Updates the TTS voice."""
@@ -365,11 +453,12 @@ class Controller:
                 else:
                     self.refresh_ui_callback()
         
-    def bind_view(self, refresh_callback, stream_callback=None, theme_callback=None):
+    def bind_view(self, refresh_callback, stream_callback=None, theme_callback=None, font_callback=None):
         """Binds the view refresh and theme callbacks."""
         self.refresh_ui_callback = refresh_callback
         self.stream_ui_callback = stream_callback
         self.theme_update_callback = theme_callback
+        self.font_update_callback = font_callback
 
     async def _safe_refresh(self):
         """Safely awaits the refresh callback."""
@@ -531,7 +620,11 @@ class Controller:
                 "### END MEMORY ###\n"
             )
 
-        return f"{core_text}\n\n{soul_text}\n\n{growth_text}\n\n{reflection_block}"
+        # User Context
+        username = self.settings.get('username', 'User')
+        user_context = f"\n\nCURRENT USER: {username}"
+
+        return f"{core_text}\n\n{soul_text}\n\n{growth_text}\n\n{reflection_block}{user_context}"
 
     def _calc_context_target(self, max_tokens: int) -> int:
         """Returns the target max tokens for the prompt after headroom."""
@@ -650,7 +743,7 @@ class Controller:
         context_messages = [{"role": "system", "content": system_prompt}] + context_history
 
         # Trim context to fit target window
-        max_ctx = self.settings.get('context_window', 8192)
+        max_ctx = self.brain_router.llm_config.get("consciousness_5070ti", {}).get("options", {}).get("num_ctx", 8192)
         target_ctx = self._calc_context_target(max_ctx)
         context_messages, trimmed = self._trim_context_messages(context_messages, target_ctx)
         context_messages, system_trimmed = self._ensure_system_prompt_fits(context_messages, target_ctx)

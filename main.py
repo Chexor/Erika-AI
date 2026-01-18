@@ -115,6 +115,7 @@ def spawn_window():
             if 'window_y' in settings: cmd.extend(["--y", str(settings['window_y'])])
             if 'window_width' in settings: cmd.extend(["--width", str(settings['window_width'])])
             if 'window_height' in settings: cmd.extend(["--height", str(settings['window_height'])])
+            if settings.get('always_on_top', False): cmd.append("--always-on-top")
 
         try:
             # Popen is non-blocking

@@ -44,6 +44,7 @@ class BrainRouter:
                 try:
                     with open(path, 'r', encoding='utf-8') as f:
                         self.llm_config = json.load(f)
+                    self.config_path = path
                     logger.info(f"BrainRouter: Loaded LLM Config from {path}")
                     break
                 except (json.JSONDecodeError, IOError) as e:
@@ -111,6 +112,26 @@ class BrainRouter:
         # Default
         return self.LOCAL_BRAIN
         
+    def set_model_option(self, node_group: str, key: str, value: Any):
+        """Updates a model option in the config."""
+        if node_group not in self.llm_config:
+            self.llm_config[node_group] = {"options": {}}
+        if "options" not in self.llm_config[node_group]:
+            self.llm_config[node_group]["options"] = {}
+        
+        self.llm_config[node_group]["options"][key] = value
+
+    def save_config(self):
+        """Saves current llm_config back to disk."""
+        path = getattr(self, 'config_path', os.path.join("config", "llm_config.json"))
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(self.llm_config, f, indent=4)
+            logger.info(f"BrainRouter: Saved LLM Config to {path}")
+        except Exception as e:
+            logger.error(f"BrainRouter: Failed to save config: {e}")
+
     # Legacy / Controller Support
     async def route_query(self, task_type: str, payload: dict) -> str:
         host = self.get_primary_host(task_type)

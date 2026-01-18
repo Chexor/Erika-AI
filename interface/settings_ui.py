@@ -9,6 +9,9 @@ ALLOWED_HANDLERS = frozenset({
     'set_tts_autoplay',
     'set_context_window',
     'set_accent_color',
+    'set_font_size',
+    'set_run_on_startup',
+    'set_always_on_top',
 })
 
 def _safe_get_handler(controller, handler_name: str):
@@ -32,13 +35,17 @@ SETTINGS_CONFIG = [
                         "type": "toggle",
                         "label": "Run on Startup",
                         "sub": "Launch Erika automatically when system starts",
-                        "default": True
+                        "default": True,
+                        "key": "run_on_startup",
+                        "change_handler": "set_run_on_startup"
                     },
                     {
                         "type": "toggle",
                         "label": "Always on Top",
-                        "sub": "Keep the interaction window above other apps",
-                        "default": False
+                        "sub": "Keep the interaction window above other apps (Requires Restart)",
+                        "default": False,
+                        "key": "always_on_top",
+                        "change_handler": "set_always_on_top"
                     }
                 ]
             },
@@ -56,8 +63,10 @@ SETTINGS_CONFIG = [
                         "type": "slider",
                         "label": "Font Size",
                         "min": 12,
-                        "max": 20,
-                        "default": 14
+                        "max": 24,
+                        "default": 14,
+                        "key": "font_size",
+                        "change_handler": "set_font_size"
                     }
                 ]
             }
@@ -113,11 +122,9 @@ SETTINGS_CONFIG = [
                         "label": "Context Length",
                         "sub": "Determines how much conversation history the AI can remember.",
                         "steps": ["4k", "8k", "16k", "32k", "64k", "128k", "256k"],
-                        "default_index": 1
-                    },
-                    {
-                        "type": "metrics",
-                        "label": "Real-time Metrics"
+                        "default_index": 1,
+                        "key": "context_window",
+                        "change_handler": "set_context_window"
                     }
                 ]
             }
@@ -259,7 +266,7 @@ def render_textarea(item, controller=None):
 
     ui.textarea(placeholder=item.get('placeholder', ''), value=val, on_change=on_change)\
         .classes('w-full input-field bg-white/5 rounded-xl p-2 border border-white/10')\
-        .props('input-class="text-white" borderless rows=4 debounce="500"')
+        .props('input-class="text-white" borderless rows=20 debounce="500"')
 
 def render_buttons(item):
     ui.label(item['label']).classes('text-sm text-gray-400')
@@ -276,18 +283,7 @@ def render_model_info(item):
             ui.label(item['model_name']).classes('text-lg font-medium')
         ui.button('Change', on_click=lambda: ui.notify('Model switching coming soon!')).classes('text-xs bg-white/10')
 
-def render_metrics(item):
-    ui.label(item['label']).classes('text-sm text-gray-400')
-    
-    def stat_bar(label, val, col):
-        with ui.row().classes('w-full items-center gap-4'):
-            ui.label(label).classes('w-16 text-xs font-mono text-gray-500')
-            ui.linear_progress(val, show_value=False).props(f'color={col} track-color=grey-9').classes('flex-1 rounded-full h-2')
-            ui.label(f'{int(val*100)}%').classes('w-8 text-xs text-right text-gray-400')
-            
-    stat_bar('CPU', 0.12, 'green')
-    stat_bar('RAM', 0.45, 'orange')
-    stat_bar('VRAM', 0.82, 'red')
+
 
 def render_select(item, controller=None):
     with ui.column().classes('w-full gap-1'):
@@ -303,7 +299,7 @@ def render_select(item, controller=None):
                 if method:
                     method(e.value)
 
-        ui.select(options=item['options'], value=val, on_change=on_change).props('outlined dense options-dense behavior=menu input-class=text-white input-style="color: white !important" label-color="gray-4" color="blue-4" popup-content-class="bg-slate-900 text-white"').classes('w-full bg-slate-800/50 rounded-lg text-white')
+        ui.select(options=item['options'], value=val, on_change=on_change).props('outlined dense options-dense behavior=menu input-class="text-white" input-style="color: white !important" label-color="white" color="white" popup-content-class="bg-slate-900 text-white"').classes('w-full bg-slate-800/50 rounded-lg text-white')
 
 def render_step_slider(item, controller=None):
     with ui.column().classes('w-full gap-1'):
@@ -312,19 +308,19 @@ def render_step_slider(item, controller=None):
             ui.label(item['sub']).classes('text-xs text-gray-600 mb-2')
 
         steps = item['steps']
-        steps = item['steps']
         default_idx = item.get('default_index', 0)
         
         # Sync with actual settings
         if controller:
              current_tokens = controller.settings.get('context_window', 8192)
-             # Find closest index
+             best_diff = float('inf')
              for idx, step in enumerate(steps):
                  try:
                      kb = int(step.lower().replace('k', ''))
-                     if (kb * 1024) == current_tokens:
+                     diff = abs((kb * 1024) - current_tokens)
+                     if diff < best_diff:
+                         best_diff = diff
                          default_idx = idx
-                         break
                  except: pass
 
         # Current value label
@@ -362,7 +358,6 @@ ITEM_RENDERERS = {
     'textarea': render_textarea,
     'buttons': render_buttons,
     'model_info': render_model_info,
-    'metrics': render_metrics,
     'step_slider': render_step_slider,
     'select': render_select,
 }

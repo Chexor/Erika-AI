@@ -55,6 +55,8 @@ def main():
     parser.add_argument("--width", type=int, default=1680, help="Window Width")
     parser.add_argument("--height", type=int, default=1120, help="Window Height")
     
+    parser.add_argument("--always-on-top", action="store_true", help="Keep window on top")
+    
     args = parser.parse_args()
     
     # Path to icon
@@ -78,7 +80,8 @@ def main():
         height=args.height, 
         x=args.x,
         y=args.y,
-        resizable=True
+        resizable=True,
+        on_top=args.always_on_top
     )
     
     
