@@ -333,7 +333,9 @@ class Controller:
         if not max_tokens or max_tokens <= 0:
             return 0
         headroom = min(CONTEXT_HEADROOM_TOKENS, max_tokens // 4)
-        return max(256, max_tokens - headroom)
+        if max_tokens < 64:
+            return max_tokens
+        return min(max_tokens, max(64, max_tokens - headroom))
 
     def _trim_context_messages(self, messages: list, max_tokens: int) -> tuple[list, bool]:
         """Trims oldest messages to fit within max_tokens."""
@@ -347,7 +349,29 @@ class Controller:
             else:
                 trimmed.pop(0)
 
-        return trimmed, len(trimmed) != len(messages)
+        was_trimmed = len(trimmed) != len(messages)
+        return trimmed, was_trimmed
+
+    def _ensure_system_prompt_fits(self, messages: list, max_tokens: int) -> tuple[list, bool]:
+        """Ensures the system prompt fits by truncating it if needed."""
+        if not messages or max_tokens <= 0:
+            return messages, False
+
+        if messages[0].get("role") != "system":
+            return messages, False
+
+        system_content = messages[0].get("content", "")
+        if not system_content:
+            return messages, False
+
+        if self.token_counter.count_messages([messages[0]]) <= max_tokens:
+            return messages, False
+
+        # Truncate by characters to approximate token reduction.
+        approx_limit = max(200, max_tokens * 3)
+        truncated = system_content[:approx_limit] + "\n\n[System prompt truncated to fit context window]"
+        messages[0]["content"] = truncated
+        return messages, True
 
     async def _generate_with_timeout(self, model: str, messages: list, host: str, options: dict):
         """Async generator wrapper for LLM generation with a per-chunk timeout."""
@@ -416,9 +440,10 @@ class Controller:
         max_ctx = self.settings.get('context_window', 8192)
         target_ctx = self._calc_context_target(max_ctx)
         context_messages, trimmed = self._trim_context_messages(context_messages, target_ctx)
+        context_messages, system_trimmed = self._ensure_system_prompt_fits(context_messages, target_ctx)
         prompt_tokens = self.token_counter.count_messages(context_messages)
         self.current_token_count = prompt_tokens
-        if trimmed:
+        if trimmed or system_trimmed:
             logger.warning("Controller: Context trimmed to fit the context window.")
         
         # Initial Refresh to show the empty bubble
