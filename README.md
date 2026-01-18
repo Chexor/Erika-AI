@@ -57,6 +57,14 @@ Erika operates on **User Logical Time**, not System Time.
 *   **Backend**: AsyncIO / Httpx / Ollama
 *   **Persistence**: JSON (Short-term) / Markdown (Long-term)
 
+### TTS Offline Updates
+Erika uses Pocket-TTS in offline-first mode. You can control how often it checks for updates:
+
+* `tts_offline_mode` (default `true`): Forces offline mode. When enabled, a periodic online check is allowed only when due, then the app switches back to offline automatically.
+* `tts_update_days` (default `7`): Number of days between online update checks.
+
+These settings live in `config/user.json`.
+
 ### Quick Start
 
 1.  **Clone & Setup**:
