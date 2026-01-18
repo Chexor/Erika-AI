@@ -37,6 +37,7 @@ class Controller:
         self.current_chat_created_at = None
         self.chat_history = []  # In-memory messages for UI
         self.refresh_ui_callback = None
+        self.theme_update_callback = None # Callback for dynamic theming
         self.speaking_msg_id = None # Tracks active TTS message
         self._is_reflecting = False # Guard for re-entrancy
         
@@ -89,7 +90,8 @@ class Controller:
             'tts_volume': 1.0,
             'tts_autoplay': False,
             'tts_offline_mode': True,
-            'tts_update_days': 7
+            'tts_update_days': 7,
+            'accent_color': '#3b82f6'
         }
         if os.path.exists(self.settings_path):
             try:
@@ -182,6 +184,20 @@ class Controller:
                  asyncio.create_task(self.refresh_ui_callback())
              else:
                  self.refresh_ui_callback()
+
+    
+    def set_accent_color(self, color: str):
+        """Updates the accent color and triggers theme refresh."""
+        self.settings['accent_color'] = color
+        self.save_settings()
+        logger.info(f"Controller: Accent color updated to {color}")
+        
+        # Trigger dynamic theme update
+        if self.theme_update_callback:
+             if asyncio.iscoroutinefunction(self.theme_update_callback):
+                 asyncio.create_task(self.theme_update_callback(color))
+             else:
+                 self.theme_update_callback(color)
 
     def set_persona_prompt(self, text: str):
         """Updates the soul prompt and saves directly to MD file."""
@@ -307,10 +323,11 @@ class Controller:
                 else:
                     self.refresh_ui_callback()
         
-    def bind_view(self, refresh_callback, stream_callback=None):
-        """Binds the view refresh callback."""
+    def bind_view(self, refresh_callback, stream_callback=None, theme_callback=None):
+        """Binds the view refresh and theme callbacks."""
         self.refresh_ui_callback = refresh_callback
         self.stream_ui_callback = stream_callback
+        self.theme_update_callback = theme_callback
 
     async def _safe_refresh(self):
         """Safely awaits the refresh callback."""
@@ -364,6 +381,64 @@ class Controller:
             logger.info(f"Controller: Loaded chat {chat_id} (Tokens: {self.current_token_count})")
             
             await self._safe_refresh()
+
+    async def regenerate_last_message(self):
+        """Removes the last assistant message and regenerates it."""
+        if not self.chat_history:
+            return
+
+        # Check if last message is from assistant
+        last_msg = self.chat_history[-1]
+        if last_msg['role'] == 'assistant':
+            logger.info("Controller: Regenerating last message...")
+            self.chat_history.pop() # Remove bad response
+            
+            # Find last user message content
+            user_content = ""
+            for msg in reversed(self.chat_history):
+                if msg['role'] == 'user':
+                    user_content = msg['content']
+                    break
+            
+            if user_content:
+                # Trigger generation again (handle_user_input logic but skipping history add)
+                await self._trigger_regeneration(user_content)
+            else:
+                logger.warning("Controller: No user message found for regeneration.")
+
+    async def _trigger_regeneration(self, content: str):
+        """Internal helper to re-run generation flow without adding new user message."""
+        # This is a focused subset of handle_user_input
+        # 1. Refresh UI (removal of old msg)
+        await self._safe_refresh()
+        
+        # 2. Create placeholder
+        assistant_msg = {"role": "assistant", "content": "", "id": uuid.uuid4().hex}
+        self.chat_history.append(assistant_msg)
+        
+        # 3. Router & Generation (Logic duplicated for safety/isolation or we could factor out)
+        # Refactoring handle_user_input is better, but for now we'll call a shared core 
+        # For simplicity in this step, I will factor out the generation core.
+        # But wait, to avoid massive refactor risk right now, I'll direct call handle_user_input?
+        # No, handle_user_input appends the user message.
+        
+        # Let's Extract the generation logic in next step or duplicate it carefully?
+        # Duplication for this specific task reduces regression risk on main flow. 
+        # Actually, let's Extract `_execute_generation` from `handle_user_input`.
+        
+        # RE-USE via Refactor is safer long term. 
+        # I will refactor handle_user_input below to support this.
+        await self._execute_generation(content, assistant_msg)
+
+    async def pin_message(self, msg_id: str):
+        """Toggles pinned state of a message."""
+        for msg in self.chat_history:
+            if msg.get('id') == msg_id:
+                msg['pinned'] = not msg.get('pinned', False)
+                self._persist()
+                await self._safe_refresh()
+                logger.info(f"Controller: Toggled pin for {msg_id}")
+                break
 
     async def request_delete_chat(self, chat_id: str):
         """Deletes a chat and updates state."""
@@ -515,14 +590,22 @@ class Controller:
         assistant_msg = {"role": "assistant", "content": "", "id": uuid.uuid4().hex}
         self.chat_history.append(assistant_msg)
         
-        # Router Decision
-        target_node = await self.brain_router.route_query('chat', {'msg': content})
+        await self._execute_generation(content, assistant_msg)
+
+    async def _execute_generation(self, user_content: str, assistant_msg: dict):
+        """Core generation logic used by handle_user_input and regenerate."""
+         # Router Decision
+        target_node = await self.brain_router.route_query('chat', {'msg': user_content})
         target_url = self.brain_router.get_active_url(target_node)
         logger.info(f"Controller: Routing generation to {target_node} ({target_url})")
         
         # Build Context (System + History)
         system_prompt = self.build_system_prompt()
-        context_messages = [{"role": "system", "content": system_prompt}] + self.chat_history[:-1]
+        # Note: Chat history already contains the assistant_msg placeholder at the end
+        # We need context to exclude it for the prompt
+        context_history = self.chat_history[:-1] # Exclude empty placeholder
+        
+        context_messages = [{"role": "system", "content": system_prompt}] + context_history
 
         # Trim context to fit target window
         max_ctx = self.settings.get('context_window', 8192)

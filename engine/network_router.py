@@ -118,3 +118,9 @@ class BrainRouter:
 
     def get_active_url(self, node_name: str) -> str:
         return self.nodes.get(node_name, self.LOCAL_BRAIN)
+
+    @property
+    def current_route(self) -> str:
+        """Returns the current routing destination for chat."""
+        host = self.get_primary_host('chat')
+        return 'remote' if host == self.REMOTE_BRAIN else 'local'

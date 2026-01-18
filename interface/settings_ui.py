@@ -8,6 +8,7 @@ ALLOWED_HANDLERS = frozenset({
     'set_tts_volume',
     'set_tts_autoplay',
     'set_context_window',
+    'set_accent_color',
 })
 
 def _safe_get_handler(controller, handler_name: str):
@@ -47,7 +48,9 @@ SETTINGS_CONFIG = [
                     {
                         "type": "color_picker",
                         "label": "Accent Color",
-                        "options": ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b']
+                        "key": "accent_color",
+                        "change_handler": "set_accent_color",
+                        "options": ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#f97316']
                     },
                     {
                         "type": "slider",
@@ -94,6 +97,40 @@ SETTINGS_CONFIG = [
         ]
     },
     {
+        "id": "System",
+        "icon": "memory",
+        "label": "System",
+        "sections": [
+            {
+                "title": "Engine Settings",
+                "items": [
+                    {
+                        "type": "model_info",
+                        "model_name": "Erika-beta-14b (Qwen)"
+                    },
+                    {
+                        "type": "step_slider",
+                        "label": "Context Length",
+                        "sub": "Determines how much conversation history the AI can remember.",
+                        "steps": ["4k", "8k", "16k", "32k", "64k", "128k", "256k"],
+                        "default_index": 1
+                    },
+                    {
+                        "type": "metrics",
+                        "label": "Real-time Metrics"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "type": "separator"
+    },
+    {
+        "type": "header",
+        "label": "Tools"
+    },
+    {
         "id": "Voice",
         "icon": "record_voice_over",
         "label": "Voice",
@@ -129,33 +166,6 @@ SETTINGS_CONFIG = [
                  ]
              }
         ]
-    },
-    {
-        "id": "System",
-        "icon": "memory",
-        "label": "System",
-        "sections": [
-            {
-                "title": "Engine Settings",
-                "items": [
-                    {
-                        "type": "model_info",
-                        "model_name": "Erika-beta-14b (Qwen)"
-                    },
-                    {
-                        "type": "step_slider",
-                        "label": "Context Length",
-                        "sub": "Determines how much conversation history the AI can remember.",
-                        "steps": ["4k", "8k", "16k", "32k", "64k", "128k", "256k"],
-                        "default_index": 1
-                    },
-                    {
-                        "type": "metrics",
-                        "label": "Real-time Metrics"
-                    }
-                ]
-            }
-        ]
     }
 ]
 
@@ -167,13 +177,38 @@ def render_toggle(item):
             ui.label(item['label']).classes('text-base font-medium text-gray-200')
             if 'sub' in item:
                 ui.label(item['sub']).classes('text-xs text-gray-500')
-        ui.switch(value=item.get('default', False)).props('color=blue ignore-theme')
+        ui.switch(value=item.get('default', False)).props('ignore-theme')\
+            .on('update:model-value', lambda: ui.notify('Setting saved', position='bottom', type='positive', color='black'))
 
-def render_color_picker(item):
+def render_color_picker(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
     with ui.row().classes('gap-3'):
+        # Get current value
+        current_val = item['options'][0]
+        if controller and 'key' in item:
+            current_val = controller.settings.get(item['key'], current_val)
+
         for col in item['options']:
-            ui.button().classes('w-8 h-8 rounded-full border border-white/20').style(f'background-color: {col}')
+            # Highlight active
+            is_active = (col == current_val)
+            border_cls = 'border-white' if is_active else 'border-white/20'
+            scale_cls = 'scale-110' if is_active else 'hover:scale-105'
+            
+            def make_color_handler(c):
+                def _click():
+                    if controller and 'change_handler' in item:
+                        method = _safe_get_handler(controller, item['change_handler'])
+                        if method:
+                            method(c)
+                            ui.notify(f'Theme updated', color=c)
+                            # Apply theme immediately to current client
+                            ui.colors(primary=c)
+                            ui.run_javascript(f"document.documentElement.style.setProperty('--accent-primary', '{c}')")
+                return _click
+
+            ui.button().classes(f'w-8 h-8 rounded-full border-2 {border_cls} {scale_cls} transition-all')\
+                .style(f'background-color: {col} !important')\
+                .on('click', make_color_handler(col))
 
 def render_slider(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
@@ -187,6 +222,7 @@ def render_slider(item, controller=None):
             method = _safe_get_handler(controller, item['change_handler'])
             if method:
                 method(e.value)
+                ui.notify('Setting saved', position='bottom', type='positive', color='black')
                 
     ui.slider(min=item['min'], max=item['max'], value=val, step=item.get('step', 1), on_change=on_change).props('label-always color=blue').classes('w-full max-w-xs')
 
@@ -276,7 +312,20 @@ def render_step_slider(item, controller=None):
             ui.label(item['sub']).classes('text-xs text-gray-600 mb-2')
 
         steps = item['steps']
+        steps = item['steps']
         default_idx = item.get('default_index', 0)
+        
+        # Sync with actual settings
+        if controller:
+             current_tokens = controller.settings.get('context_window', 8192)
+             # Find closest index
+             for idx, step in enumerate(steps):
+                 try:
+                     kb = int(step.lower().replace('k', ''))
+                     if (kb * 1024) == current_tokens:
+                         default_idx = idx
+                         break
+                 except: pass
 
         # Current value label
         val_label = ui.label(steps[default_idx]).classes('text-xs font-bold text-blue-400 self-end')
@@ -334,10 +383,22 @@ def build_settings_modal(controller):
                 tabs = ui.tabs().classes('w-full flex-col items-stretch h-full gap-2').props('vertical')
                 with tabs:
                     for tab_cfg in SETTINGS_CONFIG:
-                        with ui.tab(tab_cfg['id'], label="").classes('justify-start px-4 py-3 rounded-lg text-gray-400 data-[state=active]:bg-white/10 data-[state=active]:text-white transition-all w-full h-auto min-h-0').props("no-caps flat content-class=w-full"):
-                            with ui.row().classes('w-full items-center gap-3 justify-start'):
-                                ui.icon(tab_cfg['icon'], size='xs')
-                                ui.label(tab_cfg['label']).classes('text-sm font-medium')
+                        # Handle Separator
+                        if tab_cfg.get('type') == 'separator':
+                            ui.separator().classes('bg-white/10 my-2')
+                            continue
+                        
+                        # Handle Header
+                        if tab_cfg.get('type') == 'header':
+                             ui.label(tab_cfg['label']).classes('text-xs font-bold text-gray-500 uppercase tracking-wider px-2 mt-4 mb-2')
+                             continue
+                        
+                        # Handle Tab
+                        if 'id' in tab_cfg:
+                            with ui.tab(tab_cfg['id'], label="").classes('justify-start px-4 py-3 rounded-lg text-gray-400 data-[state=active]:bg-white/10 data-[state=active]:text-white transition-all w-full h-auto min-h-0').props("no-caps flat content-class=w-full"):
+                                with ui.row().classes('w-full items-center gap-3 justify-start'):
+                                    ui.icon(tab_cfg['icon'], size='xs')
+                                    ui.label(tab_cfg['label']).classes('text-sm font-medium')
 
             # --- RIGHT CONTENT ---
             with ui.column().classes('flex-1 h-full p-8 bg-transparent'):
@@ -345,6 +406,10 @@ def build_settings_modal(controller):
                 with ui.tab_panels(tabs, value=SETTINGS_CONFIG[0]['id']).classes('w-full h-full bg-transparent text-gray-200 animated fade-in'):
                     
                     for tab_cfg in SETTINGS_CONFIG:
+                        # Skip if not a tab
+                        if 'id' not in tab_cfg:
+                            continue
+                            
                         with ui.tab_panel(tab_cfg['id']).classes('p-0 flex flex-col gap-6'):
                             
                             for i, section in enumerate(tab_cfg['sections']):
@@ -355,7 +420,7 @@ def build_settings_modal(controller):
                                         for item in section['items']:
                                             renderer = ITEM_RENDERERS.get(item['type'])
                                             if renderer:
-                                                if item['type'] in ['step_slider', 'select', 'input', 'textarea', 'slider']:
+                                                if item['type'] in ['step_slider', 'select', 'input', 'textarea', 'slider', 'color_picker']:
                                                     renderer(item, controller)
                                                 else:
                                                     renderer(item)

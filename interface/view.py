@@ -16,6 +16,9 @@ def build_ui(controller: Controller):
     # Colors: Deep charcoal/black backgrounds, subtle borders, backdrop blurs.
     # Accent: #3B82F6 (Blue) or #8B5CF6 (Purple) for user interactions.
     
+    accent_color = controller.settings.get('accent_color', '#3b82f6')
+    ui.colors(primary=accent_color)
+    
     ui.add_head_html("""
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
         <style>
@@ -24,7 +27,8 @@ def build_ui(controller: Controller):
                 --bg-surface: #181a20;    /* Sidebar / Panels */
                 --glass-border: rgba(255, 255, 255, 0.08);
                 --glass-bg: rgba(25, 27, 32, 0.6);
-                --accent-primary: #3b82f6;
+                --glass-bg: rgba(25, 27, 32, 0.6);
+                --accent-primary: """ + accent_color + """;
                 --text-primary: #e2e8f0;
                 --text-secondary: #94a3b8;
             }
@@ -67,7 +71,7 @@ def build_ui(controller: Controller):
             
             /* Message Bubbles */
             .msg-bubble-user {
-                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-primary) 100%);
                 color: white;
                 border-radius: 18px 4px 18px 18px;
                 box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
@@ -111,7 +115,59 @@ def build_ui(controller: Controller):
             }
             .send-btn:hover { transform: scale(1.05); }
             .send-btn:active { transform: scale(0.95); }
+            
+            /* Accessibility Focus Rings */
+            :focus-visible {
+                outline: 2px solid var(--accent-primary);
+                outline-offset: 2px;
+            }
+            .input-field:focus-within {
+                box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+            }
         </style>
+    """)
+
+    # --- SCRIPT INJECTION (Code Copy & Theming) ---
+    ui.add_body_html("""
+        <script>
+            // Theme Updater
+            window.updateThemeColor = (color) => {
+                document.documentElement.style.setProperty('--accent-primary', color);
+            }
+
+            // Code Block Copy Button Observer
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1) {
+                            // Check for PRE blocks inside the node or if node is PRE
+                            const pres = node.tagName === 'PRE' ? [node] : node.querySelectorAll('pre');
+                            pres.forEach(pre => {
+                                if (pre.querySelector('.copy-btn')) return;
+                                
+                                // Relative positioning for button placement
+                                pre.style.position = 'relative';
+                                
+                                const btn = document.createElement('button');
+                                btn.className = 'copy-btn absolute top-2 right-2 p-1 rounded bg-white/10 text-xs text-white/50 hover:bg-white/20 hover:text-white transition-colors';
+                                btn.innerHTML = '<span class="material-icons" style="font-size: 14px">content_copy</span>';
+                                btn.title = 'Copy code';
+                                btn.onclick = () => {
+                                    const code = pre.querySelector('code');
+                                    const text = code ? code.innerText : pre.innerText;
+                                    navigator.clipboard.writeText(text);
+                                    btn.innerHTML = '<span class="material-icons" style="font-size: 14px">check</span>';
+                                    setTimeout(() => btn.innerHTML = '<span class="material-icons" style="font-size: 14px">content_copy</span>', 2000);
+                                };
+                                pre.appendChild(btn);
+                            });
+                        }
+                    });
+                });
+            });
+            
+            observer.observe(document.body, { childList: true, subtree: true });
+        </script>
     """)
 
     # --- COMPONENTS ---
@@ -151,8 +207,17 @@ def build_ui(controller: Controller):
                 width_cls = 'max-w-[75%]' # Limit width
                 bubble_cls = 'msg-bubble-user p-4' if is_user else 'msg-bubble-ai p-5'
                 
+                # Dynamic Accent Override for User Bubble
+                style_override = f"background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-primary) 100%);" if is_user else ""
+
                 with ui.column().classes(f'{width_cls} gap-1'):
-                    with ui.column().classes(f'w-full {bubble_cls}').style('contain: layout;'):
+                    # Pinned Indicator
+                    if msg.get('pinned'):
+                        with ui.row().classes('items-center gap-1 opacity-70 mb-1'):
+                            ui.icon('push_pin', size='xs').classes('text-yellow-400 rotate-45')
+                            ui.label('Pinned').classes('text-[10px] uppercase font-bold text-yellow-500')
+
+                    with ui.column().classes(f'w-full {bubble_cls}').style(f'contain: layout; {style_override}'):
                         if is_user:
                             ui.label(msg['content']).classes('text-base leading-relaxed whitespace-pre-wrap')
                         else:
@@ -160,23 +225,34 @@ def build_ui(controller: Controller):
                             if 'id' in msg:
                                 message_elements[msg['id']] = md_el
                     
-                    # Footer Actions (Outside Bubble)
+                    # Footer Actions (Row)
                     if not is_user:
-                        with ui.row().classes('ml-2 opacity-60 hover:opacity-100 transition-opacity'):
-                             # Dynamic Icon State
+                        with ui.row().classes('ml-2 opacity-60 hover:opacity-100 transition-opacity gap-2 items-center'):
                              msg_id = msg.get('id')
+                             content = msg.get('content')
                              is_playing = controller.speaking_msg_id == msg_id
                              
+                             # TTS
                              icon_name = 'stop_circle' if is_playing else 'volume_up'
                              icon_color = 'text-red-400' if is_playing else 'text-gray-500 hover:text-blue-400'
-                             
-                             def make_tts_handler(mid, txt):
-                                 async def _tts():
-                                     await controller.toggle_tts(mid, txt)
-                                 return _tts
+                             ui.button(icon=icon_name, on_click=lambda mid=msg_id, txt=content: controller.toggle_tts(mid, txt)).props('flat round dense size=xs aria-label="Toggle Text to Speech"').classes(f'{icon_color} transition-colors')
 
-                             ui.button(icon=icon_name, on_click=make_tts_handler(msg_id, msg['content'])).props('flat round dense size=xs').classes(f'{icon_color} transition-colors')
-                
+                             # Copy
+                             async def _copy(txt):
+                                 ui.clipboard.write(txt)
+                                 ui.notify('Message copied', type='info', position='top')
+                             ui.button(icon='content_copy', on_click=lambda txt=content: _copy(txt)).props('flat round dense size=xs aria-label="Copy Message"').classes('text-gray-500 hover:text-white transition-colors')
+
+                             # Pin
+                             is_pinned = msg.get('pinned', False)
+                             pin_icon = 'push_pin'
+                             pin_color = 'text-yellow-400' if is_pinned else 'text-gray-500 hover:text-yellow-400'
+                             ui.button(icon=pin_icon, on_click=lambda mid=msg_id: controller.pin_message(mid)).props('flat round dense size=xs aria-label="Pin Message"').classes(f'{pin_color} transition-colors')
+                             
+                             # Regenerate (Only if it's the LAST message)
+                             if msg == controller.chat_history[-1]:
+                                 ui.button(icon='refresh', on_click=lambda: controller.regenerate_last_message()).props('flat round dense size=xs aria-label="Regenerate Response"').classes('text-gray-500 hover:text-green-400 transition-colors')
+
                 # --- USER AVATAR (Right) ---
                 if is_user:
                      with ui.column().classes('items-end justify-start'):
@@ -230,10 +306,22 @@ def build_ui(controller: Controller):
             # Top Bar (Model Branding)
             with ui.row().classes('w-full p-4 flex justify-between items-center z-10'):
                 ui.label('Erika AI').classes('text-lg font-semibold text-gray-200 tracking-tight opacity-50 hover:opacity-100 transition-opacity cursor-default')
+                
+                # System Status Badge (Local vs Remote)
+                is_connected = controller.brain_router.status.get('remote', False)
+                mode_label = "Dream Agent (Remote)" if is_connected else "Local Engine"
+                mode_color = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" if is_connected else "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                
+                with ui.row().classes(f'rounded-full px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-wider border {mode_color} items-center gap-2 cursor-help'):
+                    ui.label(mode_label)
+                    # ui.icon('cloud_done' if is_connected else 'computer', size='xs')
+                    with ui.tooltip():
+                        ui.label(f"Routing to: {controller.brain_router.current_route or 'Auto'}")
+
                 # Optional: Model Selector
-                with ui.button().classes('rounded-full bg-white/5 px-4 py-1.5 text-xs text-gray-400 hover:text-white transition-colors unstyled flex items-center gap-2'):
-                    ui.label('Erika-beta')
-                    ui.icon('expand_more', size='xs')
+                # with ui.button().classes('rounded-full bg-white/5 px-4 py-1.5 text-xs text-gray-400 hover:text-white transition-colors unstyled flex items-center gap-2'):
+                #     ui.label('Erika-beta')
+                #     ui.icon('expand_more', size='xs')
 
             # Chat Stream (Scroll Area)
             with ui.scroll_area().classes('w-full flex-1 p-0 pb-40') as chat_scroll:
@@ -294,7 +382,8 @@ def build_ui(controller: Controller):
                         curr = stats.get('tokens_curr', 0)
                         max_t = stats.get('tokens_max', 8192)
                         ctx_pct = (curr / max_t) * 100 if max_t > 0 else 0
-                        txt += f"CTX:  {ctx_pct:>5.1f}%"
+                        txt += f"CTX:  {ctx_pct:>5.1f}%\n"
+                        txt += f"TOKS: {curr}/{max_t}"
                         
                         stat_label.set_text(txt)
                     except Exception:
@@ -395,7 +484,13 @@ def build_ui(controller: Controller):
              except Exception:
                  pass # Element might be dead
 
-    controller.bind_view(refresh_view, update_stream)
+    
+    async def update_theme(color: str):
+        """Updates the CSS variable dynamically."""
+        ui.colors(primary=color)
+        await ui.run_javascript(f"document.documentElement.style.setProperty('--accent-primary', '{color}')")
+
+    controller.bind_view(refresh_view, update_stream, update_theme)
     ui.timer(0.1, refresh_view, once=True)
     ui.timer(0.1, controller.startup, once=True)
     ui.timer(60.0, controller.startup) # Heartbeat
