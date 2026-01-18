@@ -124,6 +124,13 @@ class Controller:
         self.settings['username'] = name
         self.save_settings()
         logger.info(f"Controller: Username updated to {name}")
+        
+        # Instant UI Update
+        if self.refresh_ui_callback:
+             if asyncio.iscoroutinefunction(self.refresh_ui_callback):
+                 asyncio.create_task(self.refresh_ui_callback())
+             else:
+                 self.refresh_ui_callback()
 
     def set_persona_prompt(self, text: str):
         """Updates the persona prompt and saves directly to MD file."""
@@ -197,9 +204,10 @@ class Controller:
                 else:
                     self.refresh_ui_callback()
         
-    def bind_view(self, refresh_callback):
+    def bind_view(self, refresh_callback, stream_callback=None):
         """Binds the view refresh callback."""
         self.refresh_ui_callback = refresh_callback
+        self.stream_ui_callback = stream_callback
 
     async def _safe_refresh(self):
         """Safely awaits the refresh callback."""
@@ -208,6 +216,14 @@ class Controller:
                 await self.refresh_ui_callback()
             else:
                 self.refresh_ui_callback()
+
+    async def _safe_stream(self, msg_id, content):
+        """Safely calls stream updater."""
+        if self.stream_ui_callback:
+            if asyncio.iscoroutinefunction(self.stream_ui_callback):
+                await self.stream_ui_callback(msg_id, content)
+            else:
+                self.stream_ui_callback(msg_id, content)
 
     def new_chat(self):
         """Starts a new chat."""
@@ -287,7 +303,15 @@ class Controller:
                 "but act naturally, as if you just woke up with these thoughts."
             )
             
-        return base_persona + memory_block
+        strict_rules = (
+            "\n\n### STRICT FORMATTING RULES ###\n"
+            "1. NO ROLEPLAY TAGS: Do not use *asterisks* or (parentheses) for actions.\n"
+            "2. NO EMOJIS: NEVER use emojis or symbols (e.g. 😊). They break the audio engine.\n"
+            "3. NATURAL SPEECH: Convey tone through words only. Use contractions (don't, it's).\n"
+            "4. NO ROBOTIC MANNERISMS: Do not say 'How can I assist you'. Just talk to him."
+        )
+            
+        return base_persona + memory_block + strict_rules
 
     async def handle_user_input(self, content: str):
         """Processes user input."""
@@ -320,26 +344,40 @@ class Controller:
         
         # Build Context (System + History)
         system_prompt = self.build_system_prompt()
-        # Note: chat_history contains the empty assistant msg at the end, so we slice it off
-        # AND we prepend system prompt
         context_messages = [{"role": "system", "content": system_prompt}] + self.chat_history[:-1]
+        
+        # Initial Refresh to show the empty bubble
+        await self._safe_refresh()
         
         # Stream response
         full_response = ""
         model_to_use = self.brain_router.LOCAL_MODEL
+        if target_node == 'remote':
+             model_to_use = self.brain_router.REMOTE_MODEL
         
         async for chunk in self.brain.generate_response(model=model_to_use, messages=context_messages, host=target_url):
             # Ollama chunk format: {'message': {'role': 'assistant', 'content': '...'}, 'done': False}
             if "message" in chunk:
-                content_bit = chunk['message'].get('content', '')
+                msg_obj = chunk['message']
+                
+                content_bit = ""
+                if isinstance(msg_obj, dict):
+                    content_bit = msg_obj.get('content', '')
+                elif hasattr(msg_obj, 'content'):
+                     content_bit = msg_obj.content
+
                 full_response += content_bit
                 assistant_msg['content'] = full_response
                 
-                if self.refresh_ui_callback:
-                     await self._safe_refresh()
+                # Targeted Update (No Flash)
+                await self._safe_stream(assistant_msg['id'], full_response)
             
             elif "error" in chunk:
                  assistant_msg['content'] = f"Error: {chunk['error']}"
+                 await self._safe_refresh()
+
+        # Final Refresh to ensure complete message consistency
+        await self._safe_refresh()
         
         # 4. Persist Final
         self._persist()

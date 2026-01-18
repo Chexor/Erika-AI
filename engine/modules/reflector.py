@@ -90,3 +90,38 @@ TRANSCRIPT:
             
         logger.info(f"Reflector: Reflection saved to {filename}")
         return "Completed"
+
+    def get_latest_reflection(self) -> str:
+        """Retrieves the most recent reflection content."""
+        if not os.path.exists(self.output_dir):
+            return ""
+            
+        try:
+            files = [f for f in os.listdir(self.output_dir) if f.endswith(".md")]
+            if not files:
+                return ""
+            
+            # Sort by name (day_DD-MM-YYYY.md)
+            latest_file = None
+            latest_date = None
+            
+            for f in files:
+                try:
+                    # Remove 'day_' and '.md'
+                    date_part = f[4:-3]
+                    dt = datetime.datetime.strptime(date_part, '%d-%m-%Y').date()
+                    if latest_date is None or dt > latest_date:
+                        latest_date = dt
+                        latest_file = f
+                except ValueError:
+                    continue
+            
+            if latest_file:
+                path = os.path.join(self.output_dir, latest_file)
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+                    
+            return ""
+        except Exception as e:
+            logger.error(f"Reflector: Failed to read latest reflection: {e}")
+            return ""

@@ -31,7 +31,7 @@ class ErikaTray:
 
     def _load_icon(self):
         """Loads icon from assets or generates fallback."""
-        icon_path = os.path.join("assets", "icon.png")
+        icon_path = os.path.join("assets", "ErikaLogo.ico")
         if os.path.exists(icon_path):
             try:
                 return Image.open(icon_path)

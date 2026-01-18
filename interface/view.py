@@ -113,15 +113,19 @@ def build_ui(controller: Controller):
 
     # --- COMPONENTS ---
     
+    # Track UI elements for direct updates
+    message_elements = {}
+
     @ui.refreshable
     def render_chat_history():
         """Renders the chat stream with high-fidelity avatars and bubbles."""
+        message_elements.clear()
         
         # 1. Empty State - Hero
         if not controller.chat_history:
             with ui.column().classes('w-full h-full items-center justify-center pb-24 fade-in'):
                 # Big Logo
-                ui.image('/assets/Erika-AI_logo2_transparent.png').classes('w-32 h-32 object-contain opacity-90 mb-6 drop-shadow-2xl')
+                ui.image('/assets/ErikaLogo_v3.png').classes('w-32 h-32 object-contain opacity-90 mb-6 drop-shadow-2xl')
                 ui.label('How can I help you today?').classes('text-2xl font-light text-gray-400')
             return
 
@@ -138,18 +142,20 @@ def build_ui(controller: Controller):
                 # --- AI AVATAR (Left) ---
                 if not is_user:
                     with ui.column().classes('items-end justify-start'):
-                         ui.image('/assets/Erika-AI_logo2_transparent.png').classes('w-10 h-10 rounded-full object-contain bg-black/20 p-1 border border-white/5')
+                         ui.image('/assets/ErikaLogo_v3.png').classes('w-10 h-10 rounded-full object-contain bg-black/20 p-1 border border-white/5')
 
                 # --- MESSAGE COLUMN (Bubble + Actions) ---
                 width_cls = 'max-w-[75%]' # Limit width
                 bubble_cls = 'msg-bubble-user p-4' if is_user else 'msg-bubble-ai p-5'
                 
                 with ui.column().classes(f'{width_cls} gap-1'):
-                    with ui.column().classes(f'w-full {bubble_cls}'):
+                    with ui.column().classes(f'w-full {bubble_cls}').style('contain: layout;'):
                         if is_user:
                             ui.label(msg['content']).classes('text-base leading-relaxed whitespace-pre-wrap')
                         else:
-                            ui.markdown(msg['content']).classes('text-base leading-relaxed w-full prose text-slate-300 prose-invert prose-p:my-1 prose-headings:text-slate-100 prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10')
+                            md_el = ui.markdown(msg['content']).classes('text-base leading-relaxed w-full prose text-slate-300 prose-invert prose-p:my-1 prose-headings:text-slate-100 prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10')
+                            if 'id' in msg:
+                                message_elements[msg['id']] = md_el
                     
                     # Footer Actions (Outside Bubble)
                     if not is_user:
@@ -193,10 +199,9 @@ def build_ui(controller: Controller):
             
             # User Account / Settings Footnote
             with ui.row().classes('w-full border-t border-white/5 pt-4 mt-auto items-center gap-3 cursor-pointer sidebar-btn p-2 rounded-lg').on('click', settings_dialog.open):
-                ui.avatar('U', color='grey-800', text_color='white').classes('w-8 h-8 text-xs font-bold')
+                user_avatar_ui = ui.avatar('U', color='grey-800', text_color='white').classes('w-8 h-8 text-xs font-bold')
                 with ui.column().classes('gap-0 flex-1'):
-                    ui.label('User').classes('text-sm font-medium text-gray-200')
-                    ui.label('Pro Plan').classes('text-[10px] text-gray-500')
+                    user_label = ui.label('User').classes('text-sm font-medium text-gray-200')
 
                 # Network Icon
                 is_online = controller.brain_router.status.get('remote', False)
@@ -308,6 +313,13 @@ def build_ui(controller: Controller):
         render_chat_history.refresh()
         chat_scroll.scroll_to(percent=1.0)
         
+        # Update User Profile
+        uname = controller.settings.get('username', 'User')
+        user_label.set_text(uname)
+        user_avatar_ui.clear()
+        with user_avatar_ui:
+             ui.label(uname[0].upper() if uname else 'U')
+
         # Refresh Sidebar
         grouped_chats = await controller.get_grouped_history()
         scroll_list.clear()
@@ -347,7 +359,16 @@ def build_ui(controller: Controller):
                  ui.label('No history yet').classes('text-xs text-gray-600 p-2 italic')
 
 
-    controller.bind_view(refresh_view)
+    async def update_stream(msg_id: str, content: str):
+        """Directly updates a bubble without full re-render."""
+        if msg_id in message_elements:
+             try:
+                 message_elements[msg_id].set_content(content)
+                 chat_scroll.scroll_to(percent=1.0)
+             except Exception:
+                 pass # Element might be dead
+
+    controller.bind_view(refresh_view, update_stream)
     ui.timer(0.1, refresh_view, once=True)
     ui.timer(0.1, controller.startup, once=True)
     ui.timer(60.0, controller.startup) # Heartbeat

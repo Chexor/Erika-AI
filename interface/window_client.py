@@ -10,9 +10,18 @@ def main():
     args = parser.parse_args()
     
     # Path to icon
-    icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'icon.png')
+    # Path to icon
+    icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'ErikaLogo.ico')
     if not os.path.exists(icon_path):
         icon_path = None # webview will use default
+
+    # Windows Taskbar Icon Fix (AppUserModelID)
+    try:
+        import ctypes
+        appid = 'erika.ai.assistant.v1' 
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appid)
+    except Exception:
+        pass
 
     # Create Window
     # confirm_close=False -> Just close. Process dies. Engine lives safely.

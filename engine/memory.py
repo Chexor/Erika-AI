@@ -110,6 +110,27 @@ class Memory:
             logger.error(f"Failed to load chat {chat_id}: {e}")
             return None
 
+    def get_chats_by_date(self, date_obj: datetime.date) -> List[Dict[str, Any]]:
+        """Retrieves all chats for a specific circadian date."""
+        date_str = date_obj.strftime('%d-%m-%Y')
+        folder_path = os.path.join(self.base_path, date_str)
+        
+        results = []
+        if not os.path.exists(folder_path):
+            return results
+            
+        for filename in os.listdir(folder_path):
+            if filename.endswith(".json"):
+                try:
+                    filepath = os.path.join(folder_path, filename)
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        results.append(data)
+                except Exception as e:
+                    logger.error(f"Failed to load chat {filename}: {e}")
+                    
+        return results
+
     def list_chats(self) -> List[Dict[str, Any]]:
         """Lists all chats recursively."""
         chats = []

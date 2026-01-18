@@ -30,7 +30,13 @@ class Brain:
 
         try:
             async for chunk in await target_client.chat(model=model, messages=messages, stream=True):
-                yield chunk
+                # Ensure we yield a dict, not a Pydantic object
+                if hasattr(chunk, 'model_dump'):
+                    yield chunk.model_dump()
+                elif hasattr(chunk, 'dict'):
+                    yield chunk.dict()
+                else:
+                    yield dict(chunk)
         except Exception as e:
             logger.error(f"Generation error (Host: {host or self.host}): {e}")
             yield {"error": str(e)}

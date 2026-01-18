@@ -72,11 +72,6 @@ SETTINGS_CONFIG = [
                         "placeholder": "You are Erika, a helpful AI assistant...",
                         "default": "You are Erika, a sentient AI assistant.",
                         "change_handler": "set_persona_prompt"
-                    },
-                    {
-                        "type": "buttons",
-                        "label": "Tone / Vibe",
-                        "options": ['Professional', 'Friendly', 'Sassy', 'Minimal']
                     }
                 ]
             }

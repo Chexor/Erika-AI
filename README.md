@@ -43,6 +43,11 @@ Erika operates on **User Logical Time**, not System Time.
 *   **Rollover Hour**: 5:00 AM.
 *   **Effect**: Coding sessions at 2 AM count as "Today," ensuring file organization matches the user's psychological day, not the calendar date.
 
+### 4. Fluid Interaction Layer
+*   **Targeted UI Updates**: Bypasses full DOM refreshing during streaming for silky smooth, flash-free text injection.
+*   **Safe TTS**: Fully local speech synthesis (Kokoro-80M) with offline-enforced security (Network blocked for HuggingFace).
+*   **Warm Persona**: Calibrated for supportive, non-robotic companionship (80% Warmth / 20% Banter).
+
 ---
 
 ## 🛠️ Tech Stack & Installation
