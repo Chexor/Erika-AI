@@ -1,4 +1,4 @@
-# Erika-AI: Distributed Synthetic Sentience
+# ![Erika-AI](assets/ErikaLogo_Text.png)
 
 > "Brain yeeted us sideways again? Let's fix that." — Erika
 
