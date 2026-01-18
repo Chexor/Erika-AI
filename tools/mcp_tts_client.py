@@ -19,6 +19,9 @@ class McpTtsClient:
         self.is_speaking = False
         self.current_voice = "azelma"
         self.volume = 1.0
+        self.temperature = 0.7
+        self.decode_steps = 1
+        self.eos_threshold = -4.0
         self.stop_event = asyncio.Event() 
         
     def set_session(self, session: ClientSession):
@@ -65,6 +68,21 @@ class McpTtsClient:
          if self.session:
              asyncio.run_coroutine_threadsafe(self.session.call_tool("set_volume", arguments={"volume": volume}), self._loop)
 
+    def set_temperature(self, temp: float):
+         self.temperature = temp
+         if self.session:
+             asyncio.run_coroutine_threadsafe(self.session.call_tool("set_temperature", arguments={"temp": temp}), self._loop)
+
+    def set_decode_steps(self, steps: int):
+         self.decode_steps = steps
+         if self.session:
+             asyncio.run_coroutine_threadsafe(self.session.call_tool("set_decode_steps", arguments={"steps": steps}), self._loop)
+
+    def set_eos_threshold(self, threshold: float):
+         self.eos_threshold = threshold
+         if self.session:
+             asyncio.run_coroutine_threadsafe(self.session.call_tool("set_eos_threshold", arguments={"threshold": threshold}), self._loop)
+
     def stop(self):
          if self.session:
              asyncio.run_coroutine_threadsafe(self.session.call_tool("stop", arguments={}), self._loop)
@@ -77,8 +95,17 @@ class McpTtsClient:
          async def _speak_task():
              try:
                  self.is_speaking = True
-                 # Call speak
-                 await self.session.call_tool("speak", arguments={"text": text, "autoplay": True})
+                 # Call speak with all current context
+                 args = {
+                     "text": text,
+                     "voice": self.current_voice,
+                     "volume": self.volume,
+                     "temperature": self.temperature,
+                     "decode_steps": self.decode_steps,
+                     "eos_threshold": self.eos_threshold,
+                     "autoplay": True
+                 }
+                 await self.session.call_tool("speak", arguments=args)
                  
                  # Poll for completion
                  # The server uses a thread, so is_speaking remains true for a duration.

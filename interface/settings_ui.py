@@ -7,11 +7,15 @@ ALLOWED_HANDLERS = frozenset({
     'set_tts_voice',
     'set_tts_volume',
     'set_tts_autoplay',
+    'set_tts_temperature',
+    'set_tts_decode_steps',
+    'set_tts_eos_threshold',
     'set_context_window',
     'set_accent_color',
     'set_font_size',
     'set_run_on_startup',
     'set_always_on_top',
+    'test_voice',
 })
 
 def _safe_get_handler(controller, handler_name: str):
@@ -62,6 +66,7 @@ SETTINGS_CONFIG = [
                     {
                         "type": "slider",
                         "label": "Font Size",
+                        "sub": "Adjust the text size for better readability.",
                         "min": 12,
                         "max": 24,
                         "default": 14,
@@ -149,6 +154,7 @@ SETTINGS_CONFIG = [
                         "type": "select",
                         "label": "Voice Model",
                         "change_handler": "set_tts_voice",
+                        "test_action": "test_voice",
                         "key": "tts_voice",
                         "options": ['alba', 'marius', 'javert', 'jean', 'fantine', 'cosette', 'eponine', 'azelma'],
                         "default": "azelma"
@@ -156,6 +162,7 @@ SETTINGS_CONFIG = [
                     {
                         "type": "slider", 
                         "label": "Volume", 
+                        "sub": "Master volume for Erika's voice synthesis.",
                         "change_handler": "set_tts_volume",
                         "key": "tts_volume",
                         "min": 0.0, 
@@ -163,13 +170,49 @@ SETTINGS_CONFIG = [
                         "step": 0.1, 
                         "default": 1.0,
                     },
-                    {
+                     {
                         "type": "toggle",
                         "label": "Auto-Read Responses",
                         "sub": "Automatically speak responses when generated",
                         "default": False,
                         "key": "tts_autoplay",
                         "change_handler": "set_tts_autoplay"
+                    },
+                    {
+                        "type": "separator"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Voice Personality",
+                        "sub": "Lower = Precise, Higher = Human/Vibrant",
+                        "min": 0.1,
+                        "max": 1.5,
+                        "step": 0.1,
+                        "default": 0.7,
+                        "key": "tts_temperature",
+                        "change_handler": "set_tts_temperature"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Speech Clarity",
+                        "sub": "Higher = Clearer audio, but more CPU load",
+                        "min": 1,
+                        "max": 5,
+                        "step": 1,
+                        "default": 1,
+                        "key": "tts_decode_steps",
+                        "change_handler": "set_tts_decode_steps"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Ending Sensitivity",
+                        "sub": "Lower = More breathing room at end of sentence",
+                        "min": -8.0,
+                        "max": -1.0,
+                        "step": 0.5,
+                        "default": -4.0,
+                        "key": "tts_eos_threshold",
+                        "change_handler": "set_tts_eos_threshold"
                     }
                  ]
              }
@@ -231,20 +274,27 @@ def render_color_picker(item, controller=None):
                 .on('click', make_color_handler(col))
 
 def render_slider(item, controller=None):
-    ui.label(item['label']).classes('text-sm text-gray-400')
-    
-    val = item['default']
-    if controller and 'key' in item:
-         val = controller.settings.get(item['key'], val)
-         
-    def on_change(e):
-        if controller and 'change_handler' in item:
-            method = _safe_get_handler(controller, item['change_handler'])
-            if method:
-                method(e.value)
-                ui.notify('Setting saved', position='bottom', type='positive', color='black')
-                
-    ui.slider(min=item['min'], max=item['max'], value=val, step=item.get('step', 1), on_change=on_change).props('label-always color=blue').classes('w-full max-w-xs')
+    with ui.column().classes('w-full gap-0 px-1'):
+        ui.label(item['label']).classes('text-sm text-gray-400')
+        if 'sub' in item:
+            ui.label(item['sub']).classes('text-xs text-gray-600 mb-2')
+        
+        val = item['default']
+        if controller and 'key' in item:
+             val = controller.settings.get(item['key'], val)
+             
+        def on_change(e):
+            if controller and 'change_handler' in item:
+                method = _safe_get_handler(controller, item['change_handler'])
+                if method:
+                    method(e.value)
+                    ui.notify('Setting saved', position='bottom', type='positive', color='black')
+                    
+        ui.slider(min=item['min'], max=item['max'], value=val, step=item.get('step', 1), on_change=on_change)\
+            .props('label-always color=blue').classes('w-full max-w-xs px-4 mt-6')
+
+def render_separator(item, controller=None):
+    ui.separator().classes('my-2 opacity-10 bg-white')
 
 def render_input(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
@@ -302,17 +352,34 @@ def render_select(item, controller=None):
     with ui.column().classes('w-full gap-1'):
         ui.label(item['label']).classes('text-sm text-gray-400')
 
-        val = item['default']
-        if controller and 'key' in item:
-             val = controller.settings.get(item['key'], val)
+        with ui.row().classes('w-full items-center gap-2'):
+            # If we have a test action, make select smaller
+            select_cls = 'w-full bg-slate-800/50 rounded-lg text-white'
+            if item.get('test_action'):
+                select_cls = 'w-[48%] bg-slate-800/50 rounded-lg text-white'
 
-        def on_change(e):
-            if controller and 'change_handler' in item:
-                method = _safe_get_handler(controller, item['change_handler'])
-                if method:
-                    method(e.value)
+            val = item.get('default')
+            if controller and 'key' in item:
+                 val = controller.settings.get(item['key'], val)
 
-        ui.select(options=item['options'], value=val, on_change=on_change).props('outlined dense options-dense behavior=menu input-class="text-white" input-style="color: white !important" label-color="white" color="white" popup-content-class="bg-slate-900 text-white"').classes('w-full bg-slate-800/50 rounded-lg text-white')
+            def on_change(e):
+                if controller and 'change_handler' in item:
+                    method = _safe_get_handler(controller, item['change_handler'])
+                    if method:
+                        method(e.value)
+
+            ui.select(options=item['options'], value=val, on_change=on_change)\
+                .props('dark outlined dense options-dense behavior=menu input-class="text-white" label-color="white" color="white" popup-content-class="bg-slate-900 text-white"')\
+                .classes(select_cls)
+
+            if item.get('test_action') and controller:
+                def run_test():
+                    method = _safe_get_handler(controller, item['test_action'])
+                    if method:
+                        method()
+                
+                ui.button(icon='play_circle', on_click=run_test).props('flat round').classes('text-blue-400')
+                ui.label('Test').classes('text-[10px] text-gray-500 -ml-2')
 
 def render_step_slider(item, controller=None):
     with ui.column().classes('w-full gap-1'):
@@ -356,7 +423,8 @@ def render_step_slider(item, controller=None):
                     pass  # Invalid format, ignore
 
         with ui.row().classes('w-full items-center gap-4'):
-            ui.slider(min=0, max=len(steps)-1, step=1, value=default_idx, on_change=on_change).props('color=blue track-color=grey-8 selection-color=blue').classes('w-full')
+            ui.slider(min=0, max=len(steps)-1, step=1, value=default_idx, on_change=on_change)\
+                .props('color=blue track-color=grey-8 selection-color=blue').classes('w-full px-4')
 
         # Step labels below
         with ui.row().classes('w-full justify-between px-1'):
@@ -373,6 +441,7 @@ ITEM_RENDERERS = {
     'model_info': render_model_info,
     'step_slider': render_step_slider,
     'select': render_select,
+    'separator': render_separator,
 }
 
 # --- BUILDER ---

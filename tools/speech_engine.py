@@ -51,6 +51,15 @@ class SpeechEngine:
     def set_volume(self, volume: float):
         self._service.set_volume(volume)
 
+    def set_temperature(self, temp: float):
+        self._service.set_temperature(temp)
+
+    def set_decode_steps(self, steps: int):
+        self._service.set_decode_steps(steps)
+
+    def set_eos_threshold(self, threshold: float):
+        self._service.set_eos_threshold(threshold)
+
     def stop(self):
         self._service.stop()
 

@@ -36,10 +36,20 @@ class TTSService:
         self.volume = 1.0
         self._speak_lock = threading.Lock()
 
+        # Advanced Inference settings
+        self.temperature = 0.7
+        self.lsd_decode_steps = 1
+        self.eos_threshold = -4.0
+
         # Enforce offline mode by default, allow periodic update checks
         self._tts_settings = self._load_tts_settings()
         self._offline_mode = bool(self._tts_settings.get("tts_offline_mode", True))
         self._update_days = int(self._tts_settings.get("tts_update_days", 7))
+        
+        # Sync advanced settings from loaded config
+        self.temperature = float(self._tts_settings.get("tts_temperature", 0.7))
+        self.lsd_decode_steps = int(self._tts_settings.get("tts_decode_steps", 1))
+        self.eos_threshold = float(self._tts_settings.get("tts_eos_threshold", -4.0))
         self._update_check_path = os.path.join(os.getcwd(), "logs", "tts_update_check.txt")
         self._update_log_path = os.path.join(os.getcwd(), "logs", "tts_update.log")
         os.makedirs(os.path.dirname(self._update_check_path), exist_ok=True)
@@ -185,6 +195,18 @@ class TTSService:
         self.volume = max(0.0, min(1.0, volume))
         logger.info(f"Volume set to: {self.volume:.2f}")
 
+    def set_temperature(self, temp: float):
+        self.temperature = max(0.0, min(2.0, temp))
+        logger.info(f"TTS Personality (Temperature) set to: {self.temperature:.2f}")
+
+    def set_decode_steps(self, steps: int):
+        self.lsd_decode_steps = max(1, min(10, steps))
+        logger.info(f"TTS Clarity (Decode Steps) set to: {self.lsd_decode_steps}")
+
+    def set_eos_threshold(self, threshold: float):
+        self.eos_threshold = max(-10.0, min(0.0, threshold))
+        logger.info(f"TTS Sensitivity (EOS Threshold) set to: {self.eos_threshold:.2f}")
+
     def stop(self):
         if self.is_speaking:
             self.stop_event.set()
@@ -211,7 +233,12 @@ class TTSService:
     def _speak_thread(self, text, on_finished):
         try:
             if self.tts_model:
-                logger.debug(f"Synthesizing: {text[:30]}... (Voice: {self.current_voice})")
+                # Apply current inference settings to the model
+                self.tts_model.temp = self.temperature
+                self.tts_model.lsd_decode_steps = self.lsd_decode_steps
+                self.tts_model.eos_threshold = self.eos_threshold
+                
+                logger.debug(f"Synthesizing: {text[:30]}... (Voice: {self.current_voice}, Temp: {self.temperature})")
                 try:
                     voice_state = self.tts_model.get_state_for_audio_prompt(self.current_voice)
                     stream_gen = self.tts_model.generate_audio_stream(voice_state, text)

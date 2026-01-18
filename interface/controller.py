@@ -46,6 +46,9 @@ SETTING_AUTHORITIES = {
     'tts_backend': 'user',
     'tts_offline_mode': 'user',
     'tts_update_days': 'user',
+    'tts_temperature': 'user',
+    'tts_decode_steps': 'user',
+    'tts_eos_threshold': 'user',
     'theme': 'user',
     'window_x': 'user',
     'window_y': 'user',
@@ -129,7 +132,10 @@ class Controller:
             'accent_color': '#3b82f6',
             'font_size': 14,
             'run_on_startup': True,
-            'always_on_top': False
+            'always_on_top': False,
+            'tts_temperature': 0.7,
+            'tts_decode_steps': 1,
+            'tts_eos_threshold': -4.0
         }
 
         # 1. Load User Settings (UI/Environment)
@@ -192,6 +198,13 @@ class Controller:
                  self.speech_engine.set_mcp_session(session)
              
              await self.speech_engine.start()
+             
+             # Sync settings to engine
+             self.speech_engine.set_voice(self.settings.get('tts_voice', 'azelma'))
+             self.speech_engine.set_volume(self.settings.get('tts_volume', 1.0))
+             self.speech_engine.set_temperature(self.settings.get('tts_temperature', 0.7))
+             self.speech_engine.set_decode_steps(self.settings.get('tts_decode_steps', 1))
+             self.speech_engine.set_eos_threshold(self.settings.get('tts_eos_threshold', -4.0))
              
         self._startup_done = True
         
@@ -389,16 +402,45 @@ class Controller:
         logger.info(f"Controller: TTS Voice updated to {voice}")
 
     def set_tts_volume(self, volume: float):
-        """Updates TTS volume."""
+        """Updates the TTS volume."""
         self.settings['tts_volume'] = volume
         self.speech_engine.set_volume(volume)
         self.save_settings()
+        logger.info(f"Controller: TTS Volume set to {volume}")
+
+    def set_tts_temperature(self, temp: float):
+        """Updates the TTS personality (temperature)."""
+        self.settings['tts_temperature'] = temp
+        self.speech_engine.set_temperature(temp)
+        self.save_settings()
+        logger.info(f"Controller: TTS Personality set to {temp}")
+
+    def set_tts_decode_steps(self, steps: int):
+        """Updates the TTS clarity (decode steps)."""
+        self.settings['tts_decode_steps'] = steps
+        self.speech_engine.set_decode_steps(int(steps))
+        self.save_settings()
+        logger.info(f"Controller: TTS Clarity set to {steps}")
+
+    def set_tts_eos_threshold(self, threshold: float):
+        """Updates the TTS sensitivity (EOS threshold)."""
+        self.settings['tts_eos_threshold'] = threshold
+        self.speech_engine.set_eos_threshold(threshold)
+        self.save_settings()
+        logger.info(f"Controller: TTS Sensitivity set to {threshold}")
 
     def set_tts_autoplay(self, enabled: bool):
         """Updates TTS Autoplay setting."""
         self.settings['tts_autoplay'] = enabled
         self.save_settings()
         logger.info(f"Controller: TTS Autoplay set to {enabled}")
+
+    def test_voice(self):
+        """Speaks a test sentence using current voice settings."""
+        voice = self.settings.get('tts_voice', 'azelma')
+        text = f"Hello, I am Erika. My voice is currently set to {voice}. How does it sound?"
+        self.speech_engine.speak(text)
+        logger.info(f"Controller: Playing voice test for {voice}")
 
     def _sanitize_for_tts(self, text: str) -> str:
         """Removes emojis and roleplay actions for TTS safety only."""
