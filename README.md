@@ -10,33 +10,31 @@
 
 Erika operates on two distinct hardware nodes, mimicking the bicameral mind theory:
 
-### 1. The Conscious Mind (Local Agency)
-*   **Hardware**: Local GPU High-Performance
-*   **Model**: `qwen3:14b`
-*   **Role**: High-speed interaction, wit, interface management, and immediate task execution.
+### 1. The Conversation agent ("HomeBeast")
+*   **Role**: Primary interface for high-speed interaction, wit, and immediate task execution.
+*   **Focus**: Optimized for low-latency responsiveness.
 *   **Personality**: Sassy, quick, empathetic, and irreverent.
 
-### 2. The Subconscious (The Librarian)
-*   **Hardware**: Remote GPU (Memory-Optimized)
-*   **Model**: `gemma2:9b` (High narrative capability)
+### 2. The Dreaming agent ("ErikaHQ")
 *   **Role**: Deep analysis, emotional reflection, and long-term memory synthesis.
-*   **Mechanism**: The "Dreaming Engine" (Reflector) runs overnight or on startup to process the previous day's events.
+*   **Focus**: Handles heavy narrative processing without impacting interaction speed.
+*   **Mechanism**: The "Dreaming Engine" processes the previous day's events in the background.
 
 ---
 
 ## ⚡ Core Engines
 
-### 🔌 Distributed Brain Router
-A custom networking layer that intelligently routes queries based on complexity.
-*   **Chat**: Routed to Local GPU for sub-second latency.
-*   **Reflection**: Routed to Remote GPU for deep-dive analysis without blocking the main thread.
-*   **Fallback**: Automatically degrades to Local mode if the Remote Subconscious is offline.
+### 🔌 Distributed Workload Offloading
+Erika is designed for horizontal scalability across your local network.
+*   **Task Routing**: The system intelligently offloads heavy computational tasks—like tool execution, memory indexing, and narrative reflection—to the **Dreaming agent**.
+*   **Latency Shielding**: By offloading non-critical workloads, the **Conversation agent** remains fluid and responsive even during complex background operations.
 
 ### 🌙 The Narrative Reflector ("Dreaming")
-Erika doesn't just log chats; she processes them.
-*    **The Process**: When a new day begins, the system aggregates the previous day's logs.
-*   **The Dream**: The Subconscious generates a "Morning Perspective"—a 300-word emotional summary focusing on the user's vibe (e.g., "The user was focused on complex tasks").
-*   **The Awakening**: This summary is injected into Erika's active context upon startup, giving her "feelings" about yesterday without needing to re-read raw logs.
+Erika doesn't just log chats; she processes them through a multi-stage subconscious cycle:
+
+1. **Reflection (The Memory Flashback)**: Every night at the 5:00 AM rollover (or on startup), the **Dreaming agent** gathers the day's transcripts. It extracts "The Pulse" (your mood), "Hard Facts" (dates, code issues, Metallica bands), and "The Connection" (how we bonded).
+2. **Growth (The Evolution)**: Based on these reflections, Erika's personality profile actually *evolves*. The **Dreaming agent** drops outdated traits and adopts new quirks or relationship dynamics. If you spent the day joking about a specific bug, she'll wake up with that "humor" integrated into her active personality.
+3. **The Awakening**: This processed narrative is injected into the **Conversation agent's** active context. When you say "Good morning," she isn't just resetting; she's waking up with a fresh perspective on everything you did yesterday.
 
 ### 🕰️ Circadian TimeKeeper
 Erika operates on **User Logical Time**, not System Time.
@@ -73,17 +71,15 @@ Erika uses Pocket-TTS in offline-first mode. You can control how often it checks
 
 These settings live in `config/user.json`.
 
-### 🛠️ Test and Development Environment
-
 The system was developed and tested on a distributed setup to ensure bicameral performance:
 
-*   **Primary Node (Local)**:
+*   **Conversation agent (Local)**:
     *   **GPU**: NVIDIA RTX 5070 Ti
     *   **Role**: High-speed interface and immediate response generation.
-*   **Secondary Node (Remote)**:
+*   **Dreaming agent (Remote)**:
     *   **GPU**: NVIDIA RTX 3060 (12GB VRAM)
     *   **Role**: Deep narrative reflection and long-term memory synthesis.
-*   **Networking**: Gigabit LAN for low-latency communication between brain components.
+*   **Networking**: Gigabit LAN for low-latency communication between agent components.
 
 ### Quick Start
 
