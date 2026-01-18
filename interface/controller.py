@@ -24,6 +24,12 @@ LLM_GENERATION_TIMEOUT = 300  # 5 minutes timeout for LLM generation
 CONTEXT_HEADROOM_TOKENS = 512  # Reserve space for completion
 
 class Controller:
+    async def shutdown(self):
+        """Graceful shutdown of controller resources."""
+        if self.brain:
+            await self.brain.cleanup()
+        logger.info("Controller: Shutdown complete.")
+
     def __init__(self, brain: Brain, memory: Memory):
         self.brain = brain
         self.memory = memory
@@ -49,8 +55,26 @@ class Controller:
         self.reflection_service = ReflectionService(self.brain, self.memory, self.brain_router)
         self.growth_service = GrowthService(self.brain, self.brain_router)
         
-        # Speech Engine
-        self.speech_engine = SpeechEngine()
+        # Load User Config for TTS
+        self.user_config = {}
+        try:
+            with open(os.path.join("config", "user.json"), "r") as f:
+                self.user_config = json.load(f)
+        except Exception:
+            pass
+            
+        # Speech Engine Selection
+        if self.user_config.get("tts_backend") == "mcp":
+            try:
+                from tools.mcp_tts_client import McpTtsClient
+                logger.info("Controller: Using MCP TTS Backend.")
+                self.speech_engine = McpTtsClient()
+            except Exception as e:
+                logger.error(f"Controller: Failed to load MCP Client ({e}). Fallback to Local.")
+                self.speech_engine = SpeechEngine()
+        else:
+             logger.info("Controller: Using Local TTS Backend.")
+             self.speech_engine = SpeechEngine()
         
         # Settings State
         self.settings_path = os.path.join("config", "user.json")
@@ -94,6 +118,11 @@ class Controller:
             
         logger.info("Controller: Running startup network checks...")
         await self.brain_router.update_status()
+        
+        # Start Speech Engine (Connects if MCP)
+        if hasattr(self.speech_engine, 'start'):
+             await self.speech_engine.start()
+             
         self._startup_done = True
         
         # Run Reflection Check (Background)

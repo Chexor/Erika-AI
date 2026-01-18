@@ -44,12 +44,28 @@ def cleanup():
 
     logger.info("Engine: Cleanup initiated.")
 
-    # Stop System Monitor
-    if controller and hasattr(controller, 'system_monitor'):
+    # Stop System Monitor & Controller Resources
+    if controller:
         try:
-            controller.system_monitor.stop()
+             if hasattr(controller, 'system_monitor'):
+                 controller.system_monitor.stop()
+             
+             # Attempt to close async resources if possible
+             # Since cleanup calls os._exit, we only try-notify, but closing sockets is good practice
+             # We can try running it in a new loop if main loop is dead, but usually overkill.
+             # Ideally, we rely on GC or just accept OS cleanup.
+             # However, let's try to be clean.
+             try:
+                 loop = asyncio.get_event_loop()
+                 if loop.is_running():
+                     loop.create_task(controller.shutdown())
+                 else:
+                     loop.run_until_complete(controller.shutdown())
+             except Exception:
+                 pass # Best effor
+                 
         except (RuntimeError, AttributeError) as e:
-            logger.warning(f"Error stopping system monitor: {e}")
+            logger.warning(f"Error stopping controller components: {e}")
 
     try:
         if tray and tray.icon:

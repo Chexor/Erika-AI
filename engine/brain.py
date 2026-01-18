@@ -19,14 +19,25 @@ class Brain:
             logger.warning(f"Ollama unavailable at {self.host}: {e}")
             return False
 
+    async def cleanup(self):
+        """Closes the main Ollama client."""
+        try:
+            await self.client.aclose()
+            logger.info("Brain: Main Ollama client closed.")
+        except Exception as e:
+            logger.warning(f"Brain: Error closing client: {e}")
+
     async def generate_response(self, model: str, messages: list, host: str = None, options: dict = None):
         """Generates a streamed response."""
         
         # Determine client to use
-        target_client = self.client
+        should_close = False
         if host and host != self.host:
              # Create temp client for this request
              target_client = AsyncClient(host=host)
+             should_close = True
+        else:
+             target_client = self.client
 
         try:
             async for chunk in await target_client.chat(model=model, messages=messages, stream=True, options=options):
@@ -40,3 +51,6 @@ class Brain:
         except Exception as e:
             logger.error(f"Generation error (Host: {host or self.host}): {e}")
             yield {"error": str(e)}
+        finally:
+            if should_close:
+                await target_client.aclose()
