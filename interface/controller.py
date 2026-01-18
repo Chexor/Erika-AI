@@ -10,6 +10,8 @@ from engine.modules.reflector import Reflector
 import asyncio
 import uuid
 import datetime
+import json
+import os
 
 logger = setup_engine_logger("INTERFACE.Controller")
 
@@ -41,12 +43,45 @@ class Controller:
         self.speech_engine = SpeechEngine()
         
         # Settings State
-        self.settings = {
+        self.settings_path = os.path.join("config", "user.json")
+        self.settings = self.load_settings()
+
+    def load_settings(self):
+        """Loads settings from disk."""
+        defaults = {
+            'username': 'User',
             'context_window': 8192,
             'tts_voice': 'azelma',
             'tts_volume': 1.0,
             'tts_autoplay': False
         }
+        if os.path.exists(self.settings_path):
+            try:
+                with open(self.settings_path, 'r') as f:
+                    data = json.load(f)
+                    defaults.update(data)
+            except Exception as e:
+                logger.error(f"Controller: Failed to load settings: {e}")
+                
+        # Sync Persona from MD file (Authority)
+        persona_path = os.path.join("erika_home", "config", "persona.md")
+        if os.path.exists(persona_path):
+            try:
+                with open(persona_path, 'r', encoding='utf-8') as f:
+                    defaults['persona_prompt'] = f.read()
+            except Exception as e:
+                 logger.error(f"Controller: Failed to load persona.md: {e}")
+                 
+        return defaults
+
+    def save_settings(self):
+        """Saves settings to disk."""
+        try:
+            os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
+            with open(self.settings_path, 'w') as f:
+                json.dump(self.settings, f, indent=2)
+        except Exception as e:
+            logger.error(f"Controller: Failed to save settings: {e}")
         
     async def startup(self):
         """Runs startup checks."""
@@ -85,25 +120,50 @@ class Controller:
              stats['tokens_max'] = self.settings.get('context_window', 8192)
         return stats
     
+    def set_username(self, name: str):
+        self.settings['username'] = name
+        self.save_settings()
+        logger.info(f"Controller: Username updated to {name}")
+
+    def set_persona_prompt(self, text: str):
+        """Updates the persona prompt and saves directly to MD file."""
+        self.settings['persona_prompt'] = text
+        # Save to user.json for redundancy
+        self.save_settings()
+        
+        # Save to Authority File
+        persona_path = os.path.join("erika_home", "config", "persona.md")
+        try:
+            os.makedirs(os.path.dirname(persona_path), exist_ok=True)
+            with open(persona_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            logger.info("Controller: Updated persona.md")
+        except Exception as e:
+            logger.error(f"Controller: Failed to save persona.md: {e}")
+
     def set_context_window(self, tokens: int):
         """Updates the context window setting."""
         self.settings['context_window'] = tokens
+        self.save_settings()
         logger.info(f"Controller: Context Window updated to {tokens} tokens")
 
     def set_tts_voice(self, voice: str):
         """Updates the TTS voice."""
         self.settings['tts_voice'] = voice
         self.speech_engine.set_voice(voice)
+        self.save_settings()
         logger.info(f"Controller: TTS Voice updated to {voice}")
 
     def set_tts_volume(self, volume: float):
         """Updates TTS volume."""
         self.settings['tts_volume'] = volume
         self.speech_engine.set_volume(volume)
+        self.save_settings()
 
     def set_tts_autoplay(self, enabled: bool):
         """Updates TTS Autoplay setting."""
         self.settings['tts_autoplay'] = enabled
+        self.save_settings()
         logger.info(f"Controller: TTS Autoplay set to {enabled}")
 
     async def toggle_tts(self, msg_id: str, text: str):
@@ -210,7 +270,7 @@ class Controller:
              logger.warning("Controller: Persona file missing. Using fallback.")
              base_persona = (
                 "You are Erika, an intelligent and empathetic AI assistant. "
-                "You are chatting with Tim. "
+                f"You are chatting with {self.settings.get('username', 'Tim')}. "
                 "Your responses should be natural, concise, and engaging."
             )
         

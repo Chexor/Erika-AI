@@ -55,8 +55,10 @@ SETTINGS_CONFIG = [
                     {
                         "type": "input",
                         "label": "Username",
+                        "key": "username",
                         "placeholder": "Enter your name...",
-                        "default": "User"
+                        "default": "User",
+                        "change_handler": "set_username"
                     }
                 ]
             },
@@ -65,9 +67,11 @@ SETTINGS_CONFIG = [
                 "items": [
                     {
                         "type": "textarea",
-                        "label": "System Prompt",
+                        "label": "Personality Prompt",
+                        "key": "persona_prompt",
                         "placeholder": "You are Erika, a helpful AI assistant...",
-                        "default": "You are Erika, a sentient AI assistant."
+                        "default": "You are Erika, a sentient AI assistant.",
+                        "change_handler": "set_persona_prompt"
                     },
                     {
                         "type": "buttons",
@@ -162,13 +166,40 @@ def render_slider(item):
     ui.label(item['label']).classes('text-sm text-gray-400')
     ui.slider(min=item['min'], max=item['max'], value=item['default']).props('label-always color=blue').classes('w-full max-w-xs')
 
-def render_input(item):
+def render_input(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
-    ui.input(placeholder=item.get('placeholder', ''), value=item.get('default', '')).classes('w-full input-field bg-white/5 rounded-xl px-2 py-1 border border-white/10').props('input-class="text-white" borderless')
+    
+    # Resolve initial value
+    val = item.get('default', '')
+    if controller and 'key' in item:
+        val = controller.settings.get(item['key'], val)
 
-def render_textarea(item):
+    def on_change(e):
+        if controller and 'change_handler' in item:
+            method = getattr(controller, item['change_handler'], None)
+            if method:
+                method(e.value)
+
+    ui.input(placeholder=item.get('placeholder', ''), value=val, on_change=on_change)\
+        .classes('w-full input-field bg-white/5 rounded-xl px-2 py-1 border border-white/10')\
+        .props('input-class="text-white" borderless debounce="500"')
+
+def render_textarea(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
-    ui.textarea(placeholder=item.get('placeholder', ''), value=item.get('default', '')).classes('w-full input-field bg-white/5 rounded-xl p-2 border border-white/10').props('input-class="text-white" borderless rows=4')
+    
+    val = item.get('default', '')
+    if controller and 'key' in item:
+        val = controller.settings.get(item['key'], val)
+        
+    def on_change(e):
+        if controller and 'change_handler' in item:
+            method = getattr(controller, item['change_handler'], None)
+            if method:
+                method(e.value)
+                
+    ui.textarea(placeholder=item.get('placeholder', ''), value=val, on_change=on_change)\
+        .classes('w-full input-field bg-white/5 rounded-xl p-2 border border-white/10')\
+        .props('input-class="text-white" borderless rows=4 debounce="500"')
 
 def render_buttons(item):
     ui.label(item['label']).classes('text-sm text-gray-400')
@@ -295,7 +326,7 @@ def build_settings_modal(controller):
                                         for item in section['items']:
                                             renderer = ITEM_RENDERERS.get(item['type'])
                                             if renderer:
-                                                if item['type'] in ['step_slider', 'select']:
+                                                if item['type'] in ['step_slider', 'select', 'input', 'textarea']:
                                                     renderer(item, controller)
                                                 else:
                                                     renderer(item)
