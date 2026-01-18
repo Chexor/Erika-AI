@@ -3,6 +3,7 @@ import asyncio
 import logging
 from interface.controller import Controller
 from interface.settings_ui import build_settings_modal
+from interface.status_ui import open_dashboard
 
 logger = logging.getLogger(__name__)
 
@@ -287,15 +288,8 @@ def build_ui(controller: Controller):
                 with ui.column().classes('gap-0 flex-1'):
                     user_label = ui.label('User').classes('text-sm font-medium text-gray-200')
 
-                # Network Icon
-                is_online = controller.brain_router.status.get('remote', False)
-                net_color = 'text-emerald-400' if is_online else 'text-rose-500'
-                net_tip = "Erika's Subconscious: Online" if is_online else "Erika's Subconscious: Offline"
-                
                 with ui.row().classes('items-center gap-3 ml-auto'):
                      ui.label(controller.get_logical_date_str()).classes('text-[9px] text-gray-600 font-mono tracking-tighter')
-                     with ui.icon('dns', size='xs').classes(f'{net_color} opacity-90'):
-                            ui.tooltip(net_tip)
                             
                 ui.icon('settings', size='xs').classes('text-gray-500')
 
@@ -312,7 +306,8 @@ def build_ui(controller: Controller):
                 mode_label = "Dream Agent (Remote)" if is_connected else "Local Engine"
                 mode_color = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" if is_connected else "bg-blue-500/20 text-blue-300 border-blue-500/30"
                 
-                with ui.row().classes(f'rounded-full px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-wider border {mode_color} items-center gap-2 cursor-help'):
+                # Make Interactive
+                with ui.row().classes(f'rounded-full px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-wider border {mode_color} items-center gap-2 cursor-pointer transition-transform hover:scale-105').on('click', lambda: open_dashboard(controller)):
                     ui.label(mode_label)
                     # ui.icon('cloud_done' if is_connected else 'computer', size='xs')
                     with ui.tooltip():
@@ -358,38 +353,6 @@ def build_ui(controller: Controller):
                         
                         text_input.on('keydown.enter', send)
 
-            # 4. System Stats (Bottom Right)
-            with ui.row().classes('absolute bottom-8 right-24 z-40 items-center justify-center'):
-                ui.icon('monitor_heart', size='sm').classes('text-gray-400 hover:text-blue-400 transition-colors cursor-help')
-                with ui.tooltip().classes('bg-black/95 backdrop-blur border border-white/10 text-sm p-5 font-mono rounded-xl shadow-2xl min-w-[180px]'):
-                    stat_label = ui.label('Loading...').classes('whitespace-pre text-left leading-loose text-gray-300')
-                
-                def update_sys_stats():
-                    try:
-                        stats = controller.get_system_health()
-                        # Fixed 5-line format with alignment
-                        txt =  f"CPU:  {stats.get('cpu', 0):>5.1f}%\n"
-                        txt += f"RAM:  {stats.get('ram', 0):>5.1f}%\n"
-                        
-                        gpu_val = stats.get('gpu')
-                        if gpu_val is not None:
-                            txt += f"GPU:  {gpu_val:>5.1f}%\n"
-                            txt += f"VRAM: {stats.get('vram', 0):>5.1f}%\n"
-                        else:
-                            txt += "GPU:    N/A\nVRAM:   N/A\n"
-                            
-                        # Context Window Usage
-                        curr = stats.get('tokens_curr', 0)
-                        max_t = stats.get('tokens_max', 8192)
-                        ctx_pct = (curr / max_t) * 100 if max_t > 0 else 0
-                        txt += f"CTX:  {ctx_pct:>5.1f}%\n"
-                        txt += f"TOKS: {curr}/{max_t}"
-                        
-                        stat_label.set_text(txt)
-                    except Exception:
-                        pass
-                
-                ui.timer(2.0, update_sys_stats)
 
     # --- LOGIC & BINDINGS ---
     

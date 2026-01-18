@@ -172,6 +172,48 @@ class Controller:
              stats['tokens_curr'] = self.current_token_count
              stats['tokens_max'] = self.settings.get('context_window', 8192)
         return stats
+
+    def get_extended_status(self) -> dict:
+        """Aggregates comprehensive status for the dashboard."""
+        # 1. Base System Stats
+        stats = self.get_system_health() or {}
+        
+        # 2. Brain Status
+        # Check router status. If missing, assume Local is connected (since we are running)
+        b_stat = self.brain_router.status
+        stats['brain'] = {
+            'local': b_stat.get('local', True), 
+            'remote': b_stat.get('remote', False)
+        }
+        
+        # 3. MCP Servers
+        # Currently we only track TTS explicitly as a managed service
+        mcp_list = []
+        
+        # TTS Service
+        tts_mode = self.settings.get('tts_backend', 'edge')
+        if tts_mode == 'mcp':
+             # We can check the client readiness
+             is_ready = False
+             detail = "Connecting..."
+             if hasattr(self.speech_engine, 'is_ready'):
+                 is_ready = self.speech_engine.is_ready()
+                 detail = "Ready" if is_ready else "Not Ready"
+             
+             mcp_list.append({
+                 'name': 'TTS Engine (MCP)', 
+                 'status': 'ok' if is_ready else 'error',
+                 'detail': detail
+             })
+        else:
+             mcp_list.append({
+                 'name': 'TTS Engine (Edge)', 
+                 'status': 'ok',
+                 'detail': 'Internal Service'
+             })
+             
+        stats['mcp'] = mcp_list
+        return stats
     
     def set_username(self, name: str):
         self.settings['username'] = name
