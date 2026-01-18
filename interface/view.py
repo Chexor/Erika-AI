@@ -205,7 +205,7 @@ def build_ui(controller: Controller):
                 # --- AI AVATAR (Left) ---
                 if not is_user:
                     with ui.column().classes('items-end justify-start'):
-                         ui.image('/assets/ErikaLogo_small.png').classes('w-10 h-10 rounded-full object-contain bg-black/20 p-1 border border-white/5')
+                         ui.image('/assets/ErikaLogo_small.png').classes('w-10 h-10 rounded-full object-cover bg-black/20 border border-white/5')
 
                 # --- MESSAGE COLUMN (Bubble + Actions) ---
                 width_cls = 'max-w-[75%]' # Limit width
@@ -260,7 +260,7 @@ def build_ui(controller: Controller):
                 # --- USER AVATAR (Right) ---
                 if is_user:
                      with ui.column().classes('items-end justify-start'):
-                         ui.icon('person', size='sm').classes('w-9 h-9 text-gray-400 bg-white/5 rounded-full p-2')
+                         ui.icon('person', size='sm').classes('w-10 h-10 text-gray-400 bg-white/5 rounded-full p-2')
 
 
     # --- SETTINGS MODAL ---

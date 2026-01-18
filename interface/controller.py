@@ -55,7 +55,17 @@ SETTING_AUTHORITIES = {
     'window_width': 'user',
     'window_height': 'user',
     'context_window': 'llm',
-    'persona_prompt': 'soul'
+    'persona_prompt': 'soul',
+    # Interaction Agent (HomeBeast)
+    'sys_temperature': 'llm',
+    'sys_top_p': 'llm',
+    'sys_repeat_penalty': 'llm',
+    'sys_context_window': 'llm',
+    # Memory Agent (ErikaHQ)
+    'mem_temperature': 'llm',
+    'mem_top_p': 'llm',
+    'mem_repeat_penalty': 'llm',
+    'mem_context_window': 'llm'
 }
 
 class Controller:
@@ -151,9 +161,22 @@ class Controller:
 
         # 2. Load LLM Settings (Authority: llm_config.json)
         try:
-            ctx_val = self.brain_router.llm_config.get("consciousness_5070ti", {}).get("options", {}).get("num_ctx")
-            if ctx_val:
-                settings['context_window'] = ctx_val
+             # Interaction Agent
+             sys_opts = self.brain_router.llm_config.get("consciousness_5070ti", {}).get("options", {})
+             settings['sys_temperature'] = sys_opts.get("temperature", 0.7)
+             settings['sys_top_p'] = sys_opts.get("top_p", 0.9)
+             settings['sys_repeat_penalty'] = sys_opts.get("repeat_penalty", 1.1)
+             settings['sys_context_window'] = sys_opts.get("num_ctx", 8192)
+
+             # Memory Agent
+             mem_opts = self.brain_router.llm_config.get("subconscious_3060", {}).get("options", {})
+             settings['mem_temperature'] = mem_opts.get("temperature", 0.4)
+             settings['mem_top_p'] = mem_opts.get("top_p", 0.8)
+             settings['mem_repeat_penalty'] = mem_opts.get("repeat_penalty", 1.1)
+             settings['mem_context_window'] = mem_opts.get("num_ctx", 16384)
+             
+             # Legacy support until migration complete
+             settings['context_window'] = settings['sys_context_window']
         except Exception:
             pass
 
@@ -382,17 +405,61 @@ class Controller:
             logger.error(f"Controller: Failed to save erika_soul.md: {e}")
 
     def set_context_window(self, tokens: int):
-        """Updates the context window in llm_config.json (Authority) and user.json (State)."""
-        self.settings['context_window'] = tokens # Update in-memory settings
-        # No self.save_settings() here, as 'context_window' is not a 'user' authority setting.
-        # Its authority is llm_config.json.
+        """Updates the context window (Legacy Wrapper: Updates System Agent)."""
+        self.set_sys_context_window(tokens)
 
-        # Update LLM Config (Authority)
-        self.brain_router.set_model_option("consciousness_5070ti", "num_ctx", tokens)
-        self.brain_router.set_model_option("subconscious_3060", "num_ctx", tokens)
+    # --- Interaction Agent (System) Setters ---
+
+    def set_sys_temperature(self, val: float):
+        self.settings['sys_temperature'] = val
+        self.brain_router.set_model_option("consciousness_5070ti", "temperature", val)
         self.brain_router.save_config()
-        
-        logger.info(f"Controller: Context Window authority (llm_config.json) updated to {tokens} tokens.")
+        logger.info(f"Controller: System Temperature set to {val}")
+
+    def set_sys_top_p(self, val: float):
+        self.settings['sys_top_p'] = val
+        self.brain_router.set_model_option("consciousness_5070ti", "top_p", val)
+        self.brain_router.save_config()
+        logger.info(f"Controller: System Top P set to {val}")
+
+    def set_sys_repeat_penalty(self, val: float):
+        self.settings['sys_repeat_penalty'] = val
+        self.brain_router.set_model_option("consciousness_5070ti", "repeat_penalty", val)
+        self.brain_router.save_config()
+        logger.info(f"Controller: System Repeat Penalty set to {val}")
+
+    def set_sys_context_window(self, val: int):
+        self.settings['sys_context_window'] = val
+        self.settings['context_window'] = val # Keep legacy sync
+        self.brain_router.set_model_option("consciousness_5070ti", "num_ctx", val)
+        self.brain_router.save_config()
+        logger.info(f"Controller: System Context Window set to {val}")
+
+    # --- Memory Agent (ErikaHQ) Setters ---
+
+    def set_mem_temperature(self, val: float):
+        self.settings['mem_temperature'] = val
+        self.brain_router.set_model_option("subconscious_3060", "temperature", val)
+        self.brain_router.save_config()
+        logger.info(f"Controller: Memory Temperature set to {val}")
+
+    def set_mem_top_p(self, val: float):
+        self.settings['mem_top_p'] = val
+        self.brain_router.set_model_option("subconscious_3060", "top_p", val)
+        self.brain_router.save_config()
+        logger.info(f"Controller: Memory Top P set to {val}")
+
+    def set_mem_repeat_penalty(self, val: float):
+        self.settings['mem_repeat_penalty'] = val
+        self.brain_router.set_model_option("subconscious_3060", "repeat_penalty", val)
+        self.brain_router.save_config()
+        logger.info(f"Controller: Memory Repeat Penalty set to {val}")
+
+    def set_mem_context_window(self, val: int):
+        self.settings['mem_context_window'] = val
+        self.brain_router.set_model_option("subconscious_3060", "num_ctx", val)
+        self.brain_router.save_config()
+        logger.info(f"Controller: Memory Context Window set to {val}")
 
     def set_tts_voice(self, voice: str):
         """Updates the TTS voice."""

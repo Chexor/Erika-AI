@@ -16,6 +16,16 @@ ALLOWED_HANDLERS = frozenset({
     'set_run_on_startup',
     'set_always_on_top',
     'test_voice',
+    # Interaction Agent (HomeBeast)
+    'set_sys_temperature',
+    'set_sys_top_p',
+    'set_sys_repeat_penalty',
+    'set_sys_context_window',
+    # Memory Agent (ErikaHQ)
+    'set_mem_temperature',
+    'set_mem_top_p',
+    'set_mem_repeat_penalty',
+    'set_mem_context_window',
 })
 
 def _safe_get_handler(controller, handler_name: str):
@@ -111,25 +121,122 @@ SETTINGS_CONFIG = [
         ]
     },
     {
-        "id": "System",
-        "icon": "memory",
+        "id": "Interaction",
+        "icon": "settings_suggest",
         "label": "System",
         "sections": [
             {
-                "title": "Engine Settings",
+                "title": "Interaction Agent (HomeBeast)",
                 "items": [
                     {
                         "type": "model_info",
                         "model_name": "Erika-beta-14b (Qwen)"
                     },
-                    {
+                     {
                         "type": "step_slider",
-                        "label": "Context Length",
-                        "sub": "Determines how much conversation history the AI can remember.",
-                        "steps": ["4k", "8k", "16k", "32k", "64k", "128k", "256k"],
+                        "label": "Context Window",
+                        "sub": "Active memory for current conversation.",
+                        "steps": ["4k", "8k", "16k", "32k", "64k", "128k"],
                         "default_index": 1,
-                        "key": "context_window",
-                        "change_handler": "set_context_window"
+                        "key": "sys_context_window",
+                        "change_handler": "set_sys_context_window"
+                    },
+                    {
+                        "type": "separator"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Creativity (Temperature)",
+                        "sub": "Higher = More creative/unpredictable.",
+                        "min": 0.1,
+                        "max": 1.5,
+                        "step": 0.05,
+                        "default": 0.7,
+                        "key": "sys_temperature",
+                        "change_handler": "set_sys_temperature"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Focus (Top P)",
+                        "sub": "Lower = More focused on probable words.",
+                        "min": 0.1,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.9,
+                        "key": "sys_top_p",
+                        "change_handler": "set_sys_top_p"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Repetition Penalty",
+                        "sub": "Higher = Less likely to repeat text.",
+                        "min": 1.0,
+                        "max": 2.0,
+                        "step": 0.05,
+                        "default": 1.1,
+                        "key": "sys_repeat_penalty",
+                        "change_handler": "set_sys_repeat_penalty"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "Memory",
+        "icon": "psychology",
+        "label": "Memory",
+        "sections": [
+            {
+                "title": "Memory Agent (ErikaHQ)",
+                "items": [
+                    {
+                        "type": "model_info",
+                        "model_name": "Erika-sub-9b (Gemma)"
+                    },
+                     {
+                        "type": "step_slider",
+                        "label": "Context Window",
+                        "sub": "Memory processing capacity.",
+                        "steps": ["4k", "8k", "16k", "32k", "64k", "128k"],
+                        "default_index": 2,
+                        "key": "mem_context_window",
+                        "change_handler": "set_mem_context_window"
+                    },
+                    {
+                        "type": "separator"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Creativity (Temperature)",
+                        "sub": "Lower recommended for factual memory tasks.",
+                        "min": 0.1,
+                        "max": 1.5,
+                        "step": 0.05,
+                        "default": 0.4,
+                        "key": "mem_temperature",
+                        "change_handler": "set_mem_temperature"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Focus (Top P)",
+                        "sub": "Lower = More focused.",
+                        "min": 0.1,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.8,
+                        "key": "mem_top_p",
+                        "change_handler": "set_mem_top_p"
+                    },
+                    {
+                        "type": "slider",
+                        "label": "Repetition Penalty",
+                        "sub": "Prevents loops in memory consolidation.",
+                        "min": 1.0,
+                        "max": 2.0,
+                        "step": 0.05,
+                        "default": 1.1,
+                        "key": "mem_repeat_penalty",
+                        "change_handler": "set_mem_repeat_penalty"
                     }
                 ]
             }
@@ -392,7 +499,7 @@ def render_step_slider(item, controller=None):
         
         # Sync with actual settings
         if controller:
-             current_tokens = controller.settings.get('context_window', 8192)
+             current_tokens = controller.settings.get(item.get('key'), 8192)
              best_diff = float('inf')
              for idx, step in enumerate(steps):
                  try:
@@ -415,8 +522,8 @@ def render_step_slider(item, controller=None):
                 try:
                     kb = int(val_str.lower().replace('k', ''))
                     tokens = kb * 1024
-                    if controller:
-                        method = _safe_get_handler(controller, 'set_context_window')
+                    if controller and 'change_handler' in item:
+                        method = _safe_get_handler(controller, item['change_handler'])
                         if method:
                             method(tokens)
                 except ValueError:
