@@ -139,20 +139,20 @@ class Controller:
                  self.refresh_ui_callback()
 
     def set_persona_prompt(self, text: str):
-        """Updates the persona prompt and saves directly to MD file."""
+        """Updates the soul prompt and saves directly to MD file."""
         self.settings['persona_prompt'] = text
         # Save to user.json for redundancy
         self.save_settings()
         
-        # Save to Authority File
-        persona_path = os.path.join("erika_home", "config", "persona.md")
+        # Save to Authority File (Soul)
+        soul_path = os.path.join("erika_home", "config", "erika_soul.md")
         try:
-            os.makedirs(os.path.dirname(persona_path), exist_ok=True)
-            with open(persona_path, 'w', encoding='utf-8') as f:
+            os.makedirs(os.path.dirname(soul_path), exist_ok=True)
+            with open(soul_path, 'w', encoding='utf-8') as f:
                 f.write(text)
-            logger.info("Controller: Updated persona.md")
+            logger.info("Controller: Updated erika_soul.md")
         except Exception as e:
-            logger.error(f"Controller: Failed to save persona.md: {e}")
+            logger.error(f"Controller: Failed to save erika_soul.md: {e}")
 
     def set_context_window(self, tokens: int):
         """Updates the context window setting."""
