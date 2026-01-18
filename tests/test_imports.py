@@ -24,14 +24,12 @@ class TestModuleImports(unittest.TestCase):
         self.assertIsNotNone(WindowsSingleton)
 
     def test_engine_logger(self):
-        from engine.logger import setup_engine_logger
-        self.assertIsNotNone(setup_engine_logger)
+        from engine.logger import configure_system_logging
+        self.assertIsNotNone(configure_system_logging)
 
     def test_domain_reflection_service(self):
         from domain.subconscious.reflection_service import ReflectionService
         self.assertIsNotNone(ReflectionService)
-
-    def test_engine_modules_system_monitor(self):
         from engine.modules.system_monitor import SystemMonitor
         self.assertIsNotNone(SystemMonitor)
 

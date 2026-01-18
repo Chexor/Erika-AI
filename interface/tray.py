@@ -3,10 +3,11 @@ from pystray import MenuItem as item
 from PIL import Image
 import os
 import threading
-from engine.logger import setup_engine_logger
+import threading
+import logging
 
 # Use Engine Logger for Tray as well
-logger = setup_engine_logger("INTERFACE.Tray")
+logger = logging.getLogger("interface.tray")
 
 class ErikaTray:
     def __init__(self, shutdown_callback, on_show_callback=None, on_restart_callback=None, on_restart_agent_callback=None):

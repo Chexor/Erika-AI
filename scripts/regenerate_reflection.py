@@ -12,7 +12,14 @@ from domain.subconscious.growth_service import GrowthService
 from engine.brain import Brain
 from engine.memory import Memory
 from engine.network_router import BrainRouter
-from engine.logger import setup_engine_logger
+import logging
+
+configure_logging = True # Optional flag if we want to config logging here, but script might run standalone.
+# If standalone, we should config logging.
+from engine.logger import configure_system_logging
+configure_system_logging() 
+
+logger = logging.getLogger("scripts.regenerate")
 
 async def regenerate():
     print("Initializing...")

@@ -9,7 +9,8 @@ import sys
 import subprocess
 from nicegui import ui, app
 
-from engine.logger import setup_engine_logger
+import logging
+from engine.logger import configure_system_logging
 from engine.singleton import WindowsSingleton
 from engine.brain import Brain
 from engine.memory import Memory
@@ -18,7 +19,8 @@ from interface.controller import Controller
 from interface.view import build_ui
 
 # Setup Global Logger
-logger = setup_engine_logger("ENGINE")
+configure_system_logging()
+logger = logging.getLogger("engine")
 
 # Global State with Thread Safety
 _state_lock = threading.Lock()

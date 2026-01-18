@@ -3,11 +3,11 @@ import json
 import uuid
 import datetime
 import re
+import logging
 from typing import List, Dict, Any, Optional
-from engine.logger import setup_engine_logger
 from engine.modules.time_keeper import TimeKeeper
 
-logger = setup_engine_logger("ENGINE.Memory")
+logger = logging.getLogger("domain.memory")
 
 # UUID validation pattern
 UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)

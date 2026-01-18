@@ -18,6 +18,8 @@ chat_archive/
 config/user.json
 _legacy_backup/
 tests_temp_*/
+test_logs/
+crash_debug.txt
 
 # IDE
 .vscode/

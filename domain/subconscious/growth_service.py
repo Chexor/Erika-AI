@@ -1,9 +1,10 @@
-import os
-import logging
-from engine.logger import setup_engine_logger
 
-# Setup Domain Logger
-logger = setup_engine_logger("DOMAIN.GrowthService")
+import os
+import json
+import datetime
+import logging
+
+logger = logging.getLogger("domain.subconscious.growth")
 
 class GrowthService:
     def __init__(self, brain, router):

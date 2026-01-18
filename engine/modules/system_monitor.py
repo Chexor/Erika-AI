@@ -2,9 +2,10 @@ import threading
 import time
 import psutil
 import GPUtil
-from engine.logger import setup_engine_logger
+import GPUtil
+import logging
 
-logger = setup_engine_logger("ENGINE.SystemMonitor")
+logger = logging.getLogger("engine.modules.system_monitor")
 
 class SystemMonitor:
     def __init__(self, interval=2.0):

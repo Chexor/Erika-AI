@@ -1,9 +1,9 @@
 import os
 import datetime
 import logging
-from engine.logger import setup_engine_logger
+import logging
 
-logger = setup_engine_logger("DOMAIN.ReflectionService")
+logger = logging.getLogger("domain.subconscious.reflection")
 
 class ReflectionService:
     def __init__(self, brain, memory, router):

@@ -1,8 +1,8 @@
 from ollama import AsyncClient
-from engine.logger import setup_engine_logger
+import logging
 
 # Setup Logger
-logger = setup_engine_logger("ENGINE.Brain")
+logger = logging.getLogger("engine.brain")
 
 class Brain:
     def __init__(self, host='http://localhost:11434'):

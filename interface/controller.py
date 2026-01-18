@@ -1,6 +1,5 @@
 from engine.brain import Brain
 from engine.memory import Memory
-from engine.logger import setup_engine_logger
 from engine.modules.system_monitor import SystemMonitor
 from engine.modules.token_counter import TokenCounter
 from tools.speech_engine import SpeechEngine
@@ -14,9 +13,10 @@ import datetime
 import json
 import os
 import re
+import logging
 from typing import Optional, List, Dict, Any, Callable
 
-logger = setup_engine_logger("INTERFACE.Controller")
+logger = logging.getLogger("interface.controller")
 
 # Input validation constants
 MAX_INPUT_LENGTH = 50000  # Maximum characters for user input
@@ -88,8 +88,13 @@ class Controller:
         
     async def startup(self):
         """Runs startup checks."""
+        # Prevent spamming startup checks if called repeatedly
+        if hasattr(self, '_startup_done') and self._startup_done:
+            return
+            
         logger.info("Controller: Running startup network checks...")
         await self.brain_router.update_status()
+        self._startup_done = True
         
         # Run Reflection Check (Background)
         asyncio.create_task(self.check_legacy_reflection())
@@ -97,7 +102,7 @@ class Controller:
     async def check_legacy_reflection(self):
         """Checks if we need to generate a reflection for yesterday."""
         if self._is_reflecting:
-            logger.info("Controller: Reflection already in progress. Skipping heartbeat check.")
+            logger.debug("Controller: Reflection already in progress. Skipping heartbeat check.")
             return
 
         try:
@@ -120,7 +125,7 @@ class Controller:
                 if status == "Completed" and content:
                      await self.growth_service.evolve(content)
             else:
-                 logger.info("Controller: Reflection for yesterday exists.")
+                 logger.debug("Controller: Reflection for yesterday exists.")
         except Exception as e:
             logger.error(f"Controller: Error during reflection check: {e}")
         finally:
