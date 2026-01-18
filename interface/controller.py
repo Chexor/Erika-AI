@@ -6,7 +6,8 @@ from engine.modules.token_counter import TokenCounter
 from tools.speech_engine import SpeechEngine
 from engine.network_router import BrainRouter
 from engine.modules.time_keeper import TimeKeeper
-from engine.modules.reflector import Reflector
+from domain.subconscious.reflection_service import ReflectionService
+from domain.subconscious.growth_service import GrowthService
 import asyncio
 import uuid
 import datetime
@@ -42,8 +43,9 @@ class Controller:
         # Brain Router (Distributed)
         self.brain_router = BrainRouter()
         
-        # Reflector (Dreaming Engine)
-        self.reflector = Reflector(self.brain, self.memory, self.brain_router)
+        # Subconscious Domain Services
+        self.reflection_service = ReflectionService(self.brain, self.memory, self.brain_router)
+        self.growth_service = GrowthService(self.brain, self.brain_router)
         
         # Speech Engine
         self.speech_engine = SpeechEngine()
@@ -68,15 +70,6 @@ class Controller:
                     defaults.update(data)
             except Exception as e:
                 logger.error(f"Controller: Failed to load settings: {e}")
-                
-        # Sync Persona from MD file (Authority)
-        persona_path = os.path.join("erika_home", "config", "persona.md")
-        if os.path.exists(persona_path):
-            try:
-                with open(persona_path, 'r', encoding='utf-8') as f:
-                    defaults['persona_prompt'] = f.read()
-            except Exception as e:
-                 logger.error(f"Controller: Failed to load persona.md: {e}")
                  
         return defaults
 
@@ -110,8 +103,12 @@ class Controller:
         if not os.path.exists(fpath):
             logger.info("Controller: Yesterday's reflection missing. Attempting generation...")
             # We can't block startup, but this is an async task so it's fine
-            status = await self.reflector.reflect_on_day(yesterday)
+            status, content = await self.reflection_service.reflect_on_day(yesterday)
             logger.info(f"Controller: Reflection Task Status: {status}")
+            
+            # If successful, trigger growth
+            if status == "Completed" and content:
+                 await self.growth_service.evolve(content)
         else:
              logger.info("Controller: Reflection for yesterday exists.")
 
@@ -292,10 +289,11 @@ class Controller:
             logger.warning(f"Controller: Failed to delete chat {chat_id}")
 
     def build_system_prompt(self) -> str:
-        """Constructs the system prompt from Core and Soul files."""
+        """Constructs the system prompt from Core, Soul, and Growth files."""
         base_path = os.path.join("erika_home", "config")
         core_path = os.path.join(base_path, "system_core.md")
         soul_path = os.path.join(base_path, "erika_soul.md")
+        growth_path = os.path.join(base_path, "erika_growth.md")
         
         # Load Core
         if os.path.exists(core_path):
@@ -310,9 +308,15 @@ class Controller:
                 soul_text = f.read()
         else:
             soul_text = f"You are chatting with {self.settings.get('username', 'User')}."
+
+        # Load Growth (The Living Personality)
+        growth_text = ""
+        if os.path.exists(growth_path):
+             with open(growth_path, 'r', encoding='utf-8') as f:
+                 growth_text = f.read()
             
         # Load Reflection
-        reflection = self.reflector.get_latest_reflection()
+        reflection = self.reflection_service.get_latest_reflection()
         reflection_block = ""
         if reflection:
             reflection_block = (
@@ -321,7 +325,7 @@ class Controller:
                 "### END MEMORY ###\n"
             )
 
-        return f"{core_text}\n\n{soul_text}\n\n{reflection_block}"
+        return f"{core_text}\n\n{soul_text}\n\n{growth_text}\n\n{reflection_block}"
 
     async def _generate_with_timeout(self, model: str, messages: list, host: str, options: dict):
         """Async generator wrapper for LLM generation."""

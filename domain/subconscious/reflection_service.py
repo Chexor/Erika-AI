@@ -1,0 +1,133 @@
+import os
+import datetime
+import logging
+from engine.logger import setup_engine_logger
+
+logger = setup_engine_logger("DOMAIN.ReflectionService")
+
+class ReflectionService:
+    def __init__(self, brain, memory, router):
+        self.brain = brain
+        self.memory = memory
+        self.router = router
+        self.output_dir = os.path.join("erika_home", "reflections")
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+
+    def _generate_prompt(self, transcript: str) -> str:
+        return (
+            "You are the subconscious of Erika, an AI companion. "
+            "Below is a transcript of your interactions with Tim today.\n\n"
+            f"TRANSCRIPT:\n{transcript}\n\n"
+            "TASK:\n"
+            "Write a concise, grounded diary entry (max 250 words) determining what matters from today. "
+            "Use the following structure exactly:\n"
+            "1. **The Pulse**: How was Tim actually doing? (e.g., tired, hyperfocused, stressed).\n"
+            "2. **The Hard Facts**: List specific things Tim mentioned (projects, code issues, names, dates, bands, hobbies). "
+            "Be specific (e.g., 'He mentioned Metallica' not 'He liked music').\n"
+            "3. **The Connection**: What was our 'vibe' today? Did we bond over something specific?\n"
+            "4. **Tomorrow's Hook**: One specific thing to follow up on or remember for tomorrow.\n\n"
+            "CONSTRAINTS:\n"
+            "- Tone: Casual, specific, grounded. Use 'I' and 'We'.\n"
+            "- NO FLOWERY METAPHORS: Avoid phrases like 'invisible currents' or 'code and circuits'.\n"
+            "- EXTRACT FACTS: If he mentioned a specific band or project, WRITE IT DOWN."
+        )
+
+    async def reflect_on_day(self, date_obj: datetime.date) -> tuple[str, str | None]:
+        """
+        Runs the reflection process for the given date.
+        Returns: (status, content)
+        """
+        date_str = date_obj.strftime('%d-%m-%Y')
+        logger.info(f"ReflectionService: Starting reflection for {date_str}")
+        
+        # 1. Check Router (Strictly Remote)
+        if not self.router.status.get('remote'):
+            logger.warning("ReflectionService: Remote Brain offline. Reflection Pending.")
+            return "Pending", None
+
+        # 2. Get Data
+        chats = self.memory.get_chats_by_date(date_obj)
+        if not chats:
+            logger.info("ReflectionService: No chats found for this date. Skipping.")
+            return "No Data", None
+
+        # 3. Build Transcript
+        transcript = self._build_transcript(chats)
+        if not transcript: 
+            return "No Data", None
+
+        # 4. Generate
+        prompt = self._generate_prompt(transcript)
+        remote_host = self.router.REMOTE_BRAIN 
+        remote_model = self.router.REMOTE_MODEL
+        
+        full_response = ""
+        try:
+            async for chunk in self.brain.generate_response(
+                model=remote_model, 
+                messages=[{"role": "user", "content": prompt}], 
+                host=remote_host
+            ):
+                if "message" in chunk:
+                    full_response += chunk['message'].get('content', '')
+        except Exception as e:
+            logger.error(f"ReflectionService: Generation failed: {e}")
+            return "Failed", None
+            
+        # 5. Save
+        filename = f"day_{date_str}.md"
+        filepath = os.path.join(self.output_dir, filename)
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(f"# Morning Perspective: {date_str}\n\n{full_response}")
+            logger.info(f"ReflectionService: Reflection saved to {filename}")
+            return "Completed", full_response
+        except Exception as e:
+            logger.error(f"ReflectionService: Failed to save file: {e}")
+            return "Failed", None
+
+    def _build_transcript(self, chats: list) -> str:
+        """Helper to flatten chats into a text transcript."""
+        lines = []
+        for chat in chats:
+            for msg in chat.get('messages', []):
+                role = "Tim" if msg['role'] == 'user' else "Erika"
+                content = msg.get('content', '')
+                lines.append(f"{role}: {content}")
+        return "\n".join(lines)
+
+    def get_latest_reflection(self) -> str:
+        """Retrieves the most recent reflection content."""
+        if not os.path.exists(self.output_dir):
+            return ""
+            
+        try:
+            files = [f for f in os.listdir(self.output_dir) if f.endswith(".md")]
+            if not files:
+                return ""
+            
+            # Sort by name (day_DD-MM-YYYY.md)
+            latest_file = None
+            latest_date = None
+            
+            for f in files:
+                try:
+                    # Remove 'day_' and '.md'
+                    date_part = f[4:-3]
+                    dt = datetime.datetime.strptime(date_part, '%d-%m-%Y').date()
+                    if latest_date is None or dt > latest_date:
+                        latest_date = dt
+                        latest_file = f
+                except ValueError:
+                    continue
+            
+            if latest_file:
+                path = os.path.join(self.output_dir, latest_file)
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+                    
+            return ""
+        except Exception as e:
+            logger.error(f"ReflectionService: Failed to read latest reflection: {e}")
+            return ""

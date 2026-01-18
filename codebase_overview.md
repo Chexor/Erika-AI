@@ -14,20 +14,19 @@ The system is strictly divided into four layers to ensure separation of concerns
     *   `logger.py`: Centralized logging.
 
 ### 2. MODULES (Add-ons)
-*   **Directory:** `modules/`
+*   **Directory:** `engine/modules/`
 *   **Purpose:** Pluggable extensions implementing specific capabilities.
 *   **Key Components:**
-    *   `base.py`: Abstract base class for all modules.
-    *   *(Future examples: `browser/`, `vision/`)*
-*   **Rules:** Must inherit from `base.py`. Isolated from Core and Interface details where possible.
+    *   `reflector.py`: Manages Daily Reflections and Personality Evolution.
+    *   `time_keeper.py`: Enforces the 5 AM logical day rollover.
 
 ### 3. INTERFACE (MVC)
 *   **Directory:** `interface/`
-*   **Purpose:** User interaction and presentation.
+*   **Purpose:** User interaction and presentation via NiceGUI.
 *   **Components:**
-    *   **Model (`state.py`):** `dataclasses` only. Holds UI state. No logic.
-    *   **View (`components.py`):** Pure functions returning UI elements. No `core` imports.
-    *   **Controller (`controller.py`):** Orchestrates logic. Imports `core`, `modules`, and `state`.
+    *   **View (`view.py`):** Pure UI definitions and layout logic.
+    *   **Controller (`controller.py`):** The Brain. Orchestrates logic, holds state, manages the event loop.
+    *   **Settings (`settings_ui.py`):** Logic for the settings modal.
     *   **Tray (`tray.py`):** System Tray integration (pystray).
 
 ### 4. ASSEMBLER (Entry Point)
@@ -55,15 +54,17 @@ Erika-AI/
 │       ├── system_monitor.py
 │       ├── token_counter.py
 │       ├── time_keeper.py # Circadian Clock
-│       └── reflector.py   # Narrative Engine (Dreaming)
+│       └── reflector.py   # Narrative Engine (Reflections & Growth)
 ├── erika_home/           # Persona & Long-term Data
 │   ├── config/
-│   │   └── persona.md
+│   │   ├── system_core.md   # The Law (TTS Safety)
+│   │   ├── erika_soul.md    # The Vibe (User Settings)
+│   │   └── erika_growth.md  # The Journey (Auto-Evolving)
 │   └── reflections/
 ├── interface/            # MVC Layer
-│   ├── components.py     # View
-│   ├── controller.py     # Controller
-│   ├── state.py          # Model
+│   ├── view.py           # View (NiceGUI Components)
+│   ├── controller.py     # Controller (Logic & State)
+│   ├── settings_ui.py    # Settings Modal
 │   └── tray.py           # System Tray
 ├── logs/                 # Runtime logs (ignored by git)
 ├── tests/                # Verification Layer

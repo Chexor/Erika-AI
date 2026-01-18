@@ -7,7 +7,8 @@ import datetime
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from engine.modules.reflector import Reflector
+from domain.subconscious.reflection_service import ReflectionService
+from domain.subconscious.growth_service import GrowthService
 from engine.brain import Brain
 from engine.memory import Memory
 from engine.network_router import BrainRouter
@@ -21,12 +22,19 @@ async def regenerate():
     # FORCE ONLINE for generation
     router.status['remote'] = True
     
-    reflector = Reflector(brain, memory, router)
+    reflection_service = ReflectionService(brain, memory, router)
+    growth_service = GrowthService(brain, router)
+    
     target_date = datetime.date(2026, 1, 17)
     
     print(f"Regenerating reflection for {target_date}...")
-    result = await reflector.reflect_on_day(target_date)
-    print(f"Result: {result}")
+    status, content = await reflection_service.reflect_on_day(target_date)
+    print(f"Result: {status}")
+    
+    if status == "Completed" and content:
+        print("Triggering Evolution...")
+        await growth_service.evolve(content)
+        print("Done.")
 
 if __name__ == "__main__":
     asyncio.run(regenerate())
