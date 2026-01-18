@@ -199,6 +199,18 @@ class Controller:
              else:
                  self.theme_update_callback(color)
 
+    def update_window_geometry(self, geometry: dict):
+        """Updates window position and size settings."""
+        changed = False
+        for key in ['x', 'y', 'width', 'height']:
+            if key in geometry:
+                setting_key = f"window_{key}"
+                self.settings[setting_key] = geometry[key]
+                changed = True
+        
+        if changed:
+            self.save_settings()
+
     def set_persona_prompt(self, text: str):
         """Updates the soul prompt and saves directly to MD file."""
         self.settings['persona_prompt'] = text

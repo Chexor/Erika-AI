@@ -106,12 +106,19 @@ def spawn_window():
         script_path = os.path.join(os.path.dirname(__file__), 'interface', 'window_client.py')
         url = f"http://localhost:{UI_PORT}"
 
-        # Use same python interpreter
-        python_exe = sys.executable
+        # Build Command with Persistence
+        cmd = [sys.executable, script_path, "--url", url, "--title", "Erika AI"]
+        
+        if controller:
+            settings = controller.settings
+            if 'window_x' in settings: cmd.extend(["--x", str(settings['window_x'])])
+            if 'window_y' in settings: cmd.extend(["--y", str(settings['window_y'])])
+            if 'window_width' in settings: cmd.extend(["--width", str(settings['window_width'])])
+            if 'window_height' in settings: cmd.extend(["--height", str(settings['window_height'])])
 
         try:
             # Popen is non-blocking
-            window_process = subprocess.Popen([python_exe, script_path, "--url", url, "--title", "Erika AI"])
+            window_process = subprocess.Popen(cmd)
             logger.info(f"Engine: Window spawned (PID: {window_process.pid})")
         except (OSError, subprocess.SubprocessError) as e:
             logger.error(f"Engine: Failed to spawn window: {e}")
@@ -206,6 +213,21 @@ def main():
     
     # 3. Build UI
     app.add_static_files('/assets', 'assets')
+    
+    # Internal API for Window State Sync
+    from pydantic import BaseModel
+    class WindowState(BaseModel):
+        x: int
+        y: int
+        width: int
+        height: int
+
+    @app.post('/api/window/state')
+    async def update_window_state(state: WindowState):
+        if controller:
+            controller.update_window_geometry(state.dict())
+        return {"status": "ok"}
+
     @ui.page('/')
     def main_page():
         build_ui(controller)
