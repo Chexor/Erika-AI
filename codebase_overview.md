@@ -4,15 +4,14 @@
 
 The system is strictly divided into four layers to ensure separation of concerns and modularity.
 
-### 1. CORE (Backend)
-*   **Directory:** `core/`
+### 1. ENGINE (Backend)
+*   **Directory:** `engine/`
 *   **Purpose:** Provides essential infrastructure services.
 *   **Key Components:**
-    *   `logger.py`: Centralized logging.
-    *   `settings.py`: Configuration management (`user.json` / `system.json`).
+    *   `network_router.py`: Manages Local vs Remote (Subconscious) Brain.
+    *   `memory.py`: Context, History, and TimeKeeper integration.
     *   `brain.py`: LLM manager (Ollama interface).
-    *   `memory.py`: Context and history management.
-*   **Rules:** NEVER import UI libraries (NiceGUI). Independent of specific features.
+    *   `logger.py`: Centralized logging.
 
 ### 2. MODULES (Add-ons)
 *   **Directory:** `modules/`
@@ -47,13 +46,20 @@ The system is strictly divided into four layers to ensure separation of concerns
 ```text
 Erika-AI/
 ├── assets/               # Static resources (Icons, Logos)
-├── core/                 # Infrastructure
+├── engine/               # Headless Core (Backend)
 │   ├── brain.py
 │   ├── logger.py
 │   ├── memory.py
-│   └── settings.py
-├── modules/              # Pluggable Features
-│   └── base.py
+│   ├── network_router.py # Distributed Brain Router
+│   └── modules/          # Sub-systems
+│       ├── system_monitor.py
+│       ├── token_counter.py
+│       ├── time_keeper.py # Circadian Clock
+│       └── reflector.py   # Narrative Engine (Dreaming)
+├── erika_home/           # Persona & Long-term Data
+│   ├── config/
+│   │   └── persona.md
+│   └── reflections/
 ├── interface/            # MVC Layer
 │   ├── components.py     # View
 │   ├── controller.py     # Controller
