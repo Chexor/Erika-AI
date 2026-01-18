@@ -19,11 +19,18 @@ class Brain:
             logger.warning(f"Ollama unavailable at {self.host}: {e}")
             return False
 
-    async def generate_response(self, model: str, messages: list):
+    async def generate_response(self, model: str, messages: list, host: str = None):
         """Generates a streamed response."""
+        
+        # Determine client to use
+        target_client = self.client
+        if host and host != self.host:
+             # Create temp client for this request
+             target_client = AsyncClient(host=host)
+
         try:
-            async for chunk in await self.client.chat(model=model, messages=messages, stream=True):
+            async for chunk in await target_client.chat(model=model, messages=messages, stream=True):
                 yield chunk
         except Exception as e:
-            logger.error(f"Generation error: {e}")
+            logger.error(f"Generation error (Host: {host or self.host}): {e}")
             yield {"error": str(e)}

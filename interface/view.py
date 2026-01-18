@@ -194,10 +194,21 @@ def build_ui(controller: Controller):
             # User Account / Settings Footnote
             with ui.row().classes('w-full border-t border-white/5 pt-4 mt-auto items-center gap-3 cursor-pointer sidebar-btn p-2 rounded-lg').on('click', settings_dialog.open):
                 ui.avatar('U', color='grey-800', text_color='white').classes('w-8 h-8 text-xs font-bold')
-                with ui.column().classes('gap-0'):
+                with ui.column().classes('gap-0 flex-1'):
                     ui.label('User').classes('text-sm font-medium text-gray-200')
                     ui.label('Pro Plan').classes('text-[10px] text-gray-500')
-                ui.icon('settings', size='xs').classes('ml-auto text-gray-500')
+
+                # Network Icon
+                is_online = controller.brain_router.status.get('remote', False)
+                net_color = 'text-emerald-400' if is_online else 'text-rose-500'
+                net_tip = "Erika's Subconscious: Online" if is_online else "Erika's Subconscious: Offline"
+                
+                with ui.row().classes('items-center gap-3 ml-auto'):
+                     ui.label(controller.get_logical_date_str()).classes('text-[9px] text-gray-600 font-mono tracking-tighter')
+                     with ui.icon('dns', size='xs').classes(f'{net_color} opacity-90'):
+                            ui.tooltip(net_tip)
+                            
+                ui.icon('settings', size='xs').classes('text-gray-500')
 
 
         # 2. Main Content Area
@@ -338,4 +349,6 @@ def build_ui(controller: Controller):
 
     controller.bind_view(refresh_view)
     ui.timer(0.1, refresh_view, once=True)
+    ui.timer(0.1, controller.startup, once=True)
+    ui.timer(60.0, controller.startup) # Heartbeat
 

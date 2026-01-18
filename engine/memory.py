@@ -4,6 +4,7 @@ import uuid
 import datetime
 from typing import List, Dict, Any, Optional
 from engine.logger import setup_engine_logger
+from engine.modules.time_keeper import TimeKeeper
 
 logger = setup_engine_logger("ENGINE.Memory")
 
@@ -38,17 +39,19 @@ class Memory:
         return None
 
     def save_chat(self, chat_id: str, data: Dict[str, Any]):
-        """Saves chat data to file in date-based subfolder."""
+        """Saves chat data to file in date-based subfolder (Circadian)."""
         # Determine folder DD-MM-YYYY
         created_at = data.get('created_at')
         if created_at:
             try:
                 dt = datetime.datetime.fromisoformat(created_at)
-                date_str = dt.strftime('%d-%m-%Y')
+                # Use TimeKeeper logic on the specific timestamp
+                date_obj = TimeKeeper.get_date_from_datetime(dt)
+                date_str = date_obj.strftime('%d-%m-%Y')
             except ValueError:
-                date_str = datetime.datetime.now().strftime('%d-%m-%Y')
+                date_str = TimeKeeper.get_logical_date().strftime('%d-%m-%Y')
         else:
-            date_str = datetime.datetime.now().strftime('%d-%m-%Y')
+            date_str = TimeKeeper.get_logical_date().strftime('%d-%m-%Y')
             
         folder_path = os.path.join(self.base_path, date_str)
         if not os.path.exists(folder_path):
@@ -58,7 +61,7 @@ class Memory:
 
         # Check for empty conversation
         if not data.get("messages"):
-            # Try to find existing file to delete (could be in old location)
+            # Try to find existing file to delete
             existing_path = self._find_chat_path(chat_id)
             if existing_path and os.path.exists(existing_path):
                 try:
@@ -68,7 +71,7 @@ class Memory:
                     logger.warning(f"Failed to clean up empty chat {chat_id}: {e}")
             return
             
-        # Clean up legacy location if moving (and distinct from new location)
+        # Clean up legacy location
         legacy_path = os.path.join(self.base_path, f"{chat_id}.json")
         if os.path.exists(legacy_path) and os.path.abspath(legacy_path) != os.path.abspath(file_path):
              try: os.remove(legacy_path)

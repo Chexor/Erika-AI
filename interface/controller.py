@@ -4,6 +4,9 @@ from engine.logger import setup_engine_logger
 from engine.modules.system_monitor import SystemMonitor
 from engine.modules.token_counter import TokenCounter
 from tools.speech_engine import SpeechEngine
+from engine.network_router import BrainRouter
+from engine.modules.time_keeper import TimeKeeper
+from engine.modules.reflector import Reflector
 import asyncio
 import uuid
 import datetime
@@ -28,6 +31,12 @@ class Controller:
         self.token_counter = TokenCounter()
         self.current_token_count = 0
         
+        # Brain Router (Distributed)
+        self.brain_router = BrainRouter()
+        
+        # Reflector (Dreaming Engine)
+        self.reflector = Reflector(self.brain, self.memory, self.brain_router)
+        
         # Speech Engine
         self.speech_engine = SpeechEngine()
         
@@ -38,6 +47,35 @@ class Controller:
             'tts_volume': 1.0,
             'tts_autoplay': False
         }
+        
+    async def startup(self):
+        """Runs startup checks."""
+        logger.info("Controller: Running startup network checks...")
+        await self.brain_router.update_status()
+        
+        # Run Reflection Check (Background)
+        asyncio.create_task(self.check_legacy_reflection())
+
+    async def check_legacy_reflection(self):
+        """Checks if we need to generate a reflection for yesterday."""
+        # Current logical date
+        today = TimeKeeper.get_logical_date()
+        yesterday = today - datetime.timedelta(days=1)
+        
+        # Check if file exists
+        fname = f"day_{yesterday.strftime('%d-%m-%Y')}.md"
+        fpath = os.path.join("erika_home", "reflections", fname)
+        
+        if not os.path.exists(fpath):
+            logger.info("Controller: Yesterday's reflection missing. Attempting generation...")
+            # We can't block startup, but this is an async task so it's fine
+            status = await self.reflector.reflect_on_day(yesterday)
+            logger.info(f"Controller: Reflection Task Status: {status}")
+        else:
+             logger.info("Controller: Reflection for yesterday exists.")
+
+    def get_logical_date_str(self):
+        return TimeKeeper.get_logical_date().strftime('%a, %d %b')
         
     def get_system_health(self):
         """Returns the latest system stats."""
@@ -160,6 +198,28 @@ class Controller:
         else:
             logger.warning(f"Controller: Failed to delete chat {chat_id}")
 
+    def build_system_prompt(self) -> str:
+        """Constructs the system prompt with internal memory."""
+        base_persona = (
+            "You are Erika, an intelligent and empathetic AI assistant. "
+            "You are chatting with Tim. "
+            "Your responses should be natural, concise, and engaging."
+        )
+        
+        reflection = self.reflector.get_latest_reflection()
+        
+        memory_block = ""
+        if reflection:
+            memory_block = (
+                "\n### INTERNAL MEMORY (DO NOT REPEAT VERBATIM) ###\n"
+                f"LIBRARIAN REFLECTION:\n{reflection}\n"
+                "### END MEMORY ###\n"
+                "Use the Internal Memory to inform your tone and first greeting, "
+                "but act naturally, as if you just woke up with these thoughts."
+            )
+            
+        return base_persona + memory_block
+
     async def handle_user_input(self, content: str):
         """Processes user input."""
         if not self.current_chat_id:
@@ -184,9 +244,22 @@ class Controller:
         assistant_msg = {"role": "assistant", "content": "", "id": uuid.uuid4().hex}
         self.chat_history.append(assistant_msg)
         
+        # Router Decision
+        target_node = await self.brain_router.route_query('chat', {'msg': content})
+        target_url = self.brain_router.get_active_url(target_node)
+        logger.info(f"Controller: Routing generation to {target_node} ({target_url})")
+        
+        # Build Context (System + History)
+        system_prompt = self.build_system_prompt()
+        # Note: chat_history contains the empty assistant msg at the end, so we slice it off
+        # AND we prepend system prompt
+        context_messages = [{"role": "system", "content": system_prompt}] + self.chat_history[:-1]
+        
         # Stream response
         full_response = ""
-        async for chunk in self.brain.generate_response(model="llama3", messages=self.chat_history[:-1]):
+        model_to_use = self.brain_router.LOCAL_MODEL
+        
+        async for chunk in self.brain.generate_response(model=model_to_use, messages=context_messages, host=target_url):
             # Ollama chunk format: {'message': {'role': 'assistant', 'content': '...'}, 'done': False}
             if "message" in chunk:
                 content_bit = chunk['message'].get('content', '')
