@@ -7,7 +7,7 @@ import threading
 import logging
 import glob
 import numpy as np
-from typing import Optional
+from typing import Optional, Callable
 
 # Try importing the correct class from pocket_tts
 try:
@@ -204,28 +204,34 @@ class SpeechEngine:
             self.stop_event.set()
             logger.info("SpeechEngine: Stop requested.")
 
-    def speak(self, text: str) -> bool:
+    def speak(self, text: str, on_finished: Optional[Callable[[], None]] = None) -> bool:
         """Synthesizes text and plays audio asynchronously."""
         if not text:
             return False
 
         with self._speak_lock:
-            # Stop any existing playback
-            self.stop()
-            # Wait a moment for previous thread to notice stop
+            # 1. Stop any existing playback
+            if self.is_speaking:
+                self.stop()
+                # Wait for previous thread to exit (max 1s) to prevent overlap
+                start_wait = time.time()
+                while self.is_speaking and (time.time() - start_wait < 1.0):
+                    time.sleep(0.05)
+            
+            # Reset stop signal for new playback
             self.stop_event.clear()
             self.is_speaking = True
 
             # Run in thread
-            t = threading.Thread(target=self._speak_thread, args=(text,), daemon=True)
+            t = threading.Thread(target=self._speak_thread, args=(text, on_finished), daemon=True)
             t.start()
         return True
 
-    def _speak_thread(self, text):
+    def _speak_thread(self, text, on_finished):
         try:
             # 1. Synthesize & Stream
             if self.tts_model:
-                logger.info(f"Synthesizing stream: {text[:30]}... (Voice: {self.current_voice})")
+                logger.debug(f"Synthesizing stream: {text[:30]}... (Voice: {self.current_voice})")
                 
                 voice_state = self.tts_model.get_state_for_audio_prompt(self.current_voice)
                 stream_gen = self.tts_model.generate_audio_stream(voice_state, text)
@@ -254,7 +260,7 @@ class SpeechEngine:
                         # Write to device
                         sd_stream.write(audio_np.astype(np.float32))
                 
-                logger.info("Playback finished.")
+                logger.debug("Playback finished.")
                 
             else:
                 # Mock simulation
@@ -266,4 +272,16 @@ class SpeechEngine:
         except Exception as e:
             logger.error(f"Speech error: {e}")
         finally:
+            # Fire callback if it exists and we weren't just interrupted by a new track.
+            # CRITICAL: Check stop_event BEFORE setting is_speaking=False.
+            # calling start() -> stop() -> wait() -> clear() -> start()
+            # If we set is_speaking=False first, the new start() clears the flag 
+            # before we check it, causing false firing.
+            if on_finished and not self.stop_event.is_set():
+                 try:
+                     on_finished()
+                 except Exception as e:
+                     logger.error(f"Callback error: {e}")
+            
+            # Now we are truly done
             self.is_speaking = False

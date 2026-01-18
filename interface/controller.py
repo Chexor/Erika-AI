@@ -220,11 +220,52 @@ class Controller:
             
             clean_text = self._sanitize_for_tts(text)
             self.speaking_msg_id = msg_id
-            self.speech_engine.speak(clean_text)
+            
+            # Create a callback closure for this specific message
+            def on_finished():
+                # This runs in the speech thread, so we must be thread-safe
+                if self.refresh_ui_callback:
+                    # NiceGUI Apps run on an asyncio loop. We can schedule the update.
+                    # Note: We need to access the main loop. Since we're in a thread, 
+                    # we can't just await. We use fire-and-forget logic if possible, 
+                    # or rely on ui.timer polling if nicegui loop access is hard.
+                    # But better: Controller can expose a method properly.
+                    self._handle_tts_finished_threadsafe(msg_id)
+
+            self.speech_engine.speak(clean_text, on_finished)
             logger.info(f"Controller: TTS Started for {msg_id}")
             
         # Refresh to update icons
         await self._safe_refresh()
+
+    def _handle_tts_finished_threadsafe(self, msg_id: str):
+        """Thread-safe handler for TTS completion."""
+        # We need to bridge from Thread -> Async Loop
+        try:
+             # Find running loop
+             loop = asyncio.get_running_loop() 
+        except RuntimeError:
+             loop = None
+        
+        # If we can't find loop (we are in thread), we assume app.loop is available globally 
+        # or we rely on the fact that nicegui wraps everything.
+        # Actually, best approach is creating a small scheduled task in the global loop if accessible.
+        # But since we don't have global app ref here easily, we'll try to just modify state
+        # and trigger refresh via a future if possible.
+        
+        # SAFE APPROACH: Just update state. UI poller or next interaction will pick it up?
+        # NO, user wants icon to reset.
+        # Let's import app
+        from nicegui import app
+        if app.loop:
+            app.loop.call_soon_threadsafe(self._finalize_tts_stop, msg_id)
+
+    def _finalize_tts_stop(self, msg_id: str):
+        """Final clean up on main thread."""
+        if self.speaking_msg_id == msg_id:
+            self.speaking_msg_id = None
+            if self.refresh_ui_callback:
+                asyncio.create_task(self._safe_refresh())
 
     def stop_tts(self):
         """Stops any active TTS."""
