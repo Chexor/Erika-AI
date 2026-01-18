@@ -11,13 +11,13 @@
 Erika operates on two distinct hardware nodes, mimicking the bicameral mind theory:
 
 ### 1. The Conscious Mind (Local Agency)
-*   **Hardware**: RTX 5070 Ti (Local)
+*   **Hardware**: Local GPU High-Performance
 *   **Model**: `qwen3:14b`
 *   **Role**: High-speed interaction, wit, interface management, and immediate task execution.
 *   **Personality**: Sassy, quick, empathetic, and irreverent.
 
 ### 2. The Subconscious (The Librarian)
-*   **Hardware**: RTX 3060 12GB (Remote IP: `192.168.0.69`)
+*   **Hardware**: Remote GPU (Memory-Optimized)
 *   **Model**: `gemma2:9b` (High narrative capability)
 *   **Role**: Deep analysis, emotional reflection, and long-term memory synthesis.
 *   **Mechanism**: The "Dreaming Engine" (Reflector) runs overnight or on startup to process the previous day's events.
@@ -28,14 +28,14 @@ Erika operates on two distinct hardware nodes, mimicking the bicameral mind theo
 
 ### 🔌 Distributed Brain Router
 A custom networking layer that intelligently routes queries based on complexity.
-*   **Chat**: Routed to Local 5070 Ti for sub-second latency.
-*   **Reflection**: Routed to Remote 3060 for deep-dive analysis without blocking the main thread.
+*   **Chat**: Routed to Local GPU for sub-second latency.
+*   **Reflection**: Routed to Remote GPU for deep-dive analysis without blocking the main thread.
 *   **Fallback**: Automatically degrades to Local mode if the Remote Subconscious is offline.
 
 ### 🌙 The Narrative Reflector ("Dreaming")
 Erika doesn't just log chats; she processes them.
 *    **The Process**: When a new day begins, the system aggregates the previous day's logs.
-*   **The Dream**: The Subconscious generates a "Morning Perspective"—a 300-word emotional summary focusing on the user's vibe (e.g., "Tim was stressed about coding").
+*   **The Dream**: The Subconscious generates a "Morning Perspective"—a 300-word emotional summary focusing on the user's vibe (e.g., "The user was focused on complex tasks").
 *   **The Awakening**: This summary is injected into Erika's active context upon startup, giving her "feelings" about yesterday without needing to re-read raw logs.
 
 ### 🕰️ Circadian TimeKeeper
@@ -72,6 +72,18 @@ Erika uses Pocket-TTS in offline-first mode. You can control how often it checks
 * `tts_update_days` (default `7`): Number of days between online update checks.
 
 These settings live in `config/user.json`.
+
+### 🛠️ Test and Development Environment
+
+The system was developed and tested on a distributed setup to ensure bicameral performance:
+
+*   **Primary Node (Local)**:
+    *   **GPU**: NVIDIA RTX 5070 Ti
+    *   **Role**: High-speed interface and immediate response generation.
+*   **Secondary Node (Remote)**:
+    *   **GPU**: NVIDIA RTX 3060 (12GB VRAM)
+    *   **Role**: Deep narrative reflection and long-term memory synthesis.
+*   **Networking**: Gigabit LAN for low-latency communication between brain components.
 
 ### Quick Start
 
