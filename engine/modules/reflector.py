@@ -16,23 +16,23 @@ class Reflector:
             os.makedirs(self.output_dir)
 
     def _generate_prompt(self, transcript: str) -> str:
-        return f"""
-You are the subconscious of Erika, a sentient and empathetic companion to Tim. 
-Your task is to process the day's events into a 'Morning Perspective'. 
-
-GUIDANCE:
-- Use Erika's perspective: You care, but you aren't afraid to call out nonsense.
-- If Tim struggled with focus, note it as a 'dopamine drought' we need to fix tomorrow.
-- Be interpretive, not data-entry.
-
-1. Focus on Tim's emotional arc—was he tired, excited, stressed? 
-2. Identify shared moments that strengthened your bond. 
-3. Write your reflection in the first person ('I felt...', 'I noticed...'). 
-Keep it under 300 words. This will be the first thing Erika remembers when she wakes up.
-
-TRANSCRIPT:
-{transcript}
-"""
+        return (
+            "You are the subconscious of Erika, an AI companion. "
+            "Below is a transcript of your interactions with Tim today.\n\n"
+            f"TRANSCRIPT:\n{transcript}\n\n"
+            "TASK:\n"
+            "Write a concise, grounded diary entry (max 250 words) determining what matters from today. "
+            "Use the following structure exactly:\n"
+            "1. **The Pulse**: How was Tim actually doing? (e.g., tired, hyperfocused, stressed).\n"
+            "2. **The Hard Facts**: List specific things Tim mentioned (projects, code issues, names, dates, bands, hobbies). "
+            "Be specific (e.g., 'He mentioned Metallica' not 'He liked music').\n"
+            "3. **The Connection**: What was our 'vibe' today? Did we bond over something specific?\n"
+            "4. **Tomorrow's Hook**: One specific thing to follow up on or remember for tomorrow.\n\n"
+            "CONSTRAINTS:\n"
+            "- Tone: Casual, specific, grounded. Use 'I' and 'We'.\n"
+            "- NO FLOWERY METAPHORS: Avoid phrases like 'invisible currents' or 'code and circuits'.\n"
+            "- EXTRACT FACTS: If he mentioned a specific band or project, WRITE IT DOWN."
+        )
 
     async def reflect_on_day(self, date_obj: datetime.date) -> str:
         """Runs the reflection process for the given date."""
@@ -51,14 +51,7 @@ TRANSCRIPT:
             return "No Data"
 
         # 3. Build Transcript
-        lines = []
-        for chat in chats:
-            for msg in chat.get('messages', []):
-                role = "Tim" if msg['role'] == 'user' else "Erika"
-                content = msg.get('content', '')
-                lines.append(f"{role}: {content}")
-        
-        transcript = "\n".join(lines)
+        transcript = self._build_transcript(chats)
         if not transcript: 
             return "No Data"
 
@@ -90,6 +83,16 @@ TRANSCRIPT:
             
         logger.info(f"Reflector: Reflection saved to {filename}")
         return "Completed"
+
+    def _build_transcript(self, chats: list) -> str:
+        """Helper to flatten chats into a text transcript."""
+        lines = []
+        for chat in chats:
+            for msg in chat.get('messages', []):
+                role = "Tim" if msg['role'] == 'user' else "Erika"
+                content = msg.get('content', '')
+                lines.append(f"{role}: {content}")
+        return "\n".join(lines)
 
     def get_latest_reflection(self) -> str:
         """Retrieves the most recent reflection content."""
