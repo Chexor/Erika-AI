@@ -1,7 +1,10 @@
 from nicegui import ui
 import asyncio
+import logging
 from interface.controller import Controller
 from interface.settings_ui import build_settings_modal
+
+logger = logging.getLogger(__name__)
 
 def build_ui(controller: Controller):
     """
@@ -167,7 +170,12 @@ def build_ui(controller: Controller):
                              icon_name = 'stop_circle' if is_playing else 'volume_up'
                              icon_color = 'text-red-400' if is_playing else 'text-gray-500 hover:text-blue-400'
                              
-                             ui.button(icon=icon_name, on_click=lambda m=msg_id, t=msg['content']: controller.toggle_tts(m, t)).props('flat round dense size=xs').classes(f'{icon_color} transition-colors')
+                             def make_tts_handler(mid, txt):
+                                 async def _tts():
+                                     await controller.toggle_tts(mid, txt)
+                                 return _tts
+
+                             ui.button(icon=icon_name, on_click=make_tts_handler(msg_id, msg['content'])).props('flat round dense size=xs').classes(f'{icon_color} transition-colors')
                 
                 # --- USER AVATAR (Right) ---
                 if is_user:
@@ -296,22 +304,34 @@ def build_ui(controller: Controller):
 
     # --- LOGIC & BINDINGS ---
     
-    async def confirm_delete(chat_id):
-        with ui.dialog() as dialog, ui.card().classes('bg-slate-900 border border-white/10'):
-             ui.label('Delete this conversation?').classes('text-white font-bold')
-             ui.label('This action cannot be undone.').classes('text-gray-400 text-sm')
-             with ui.row().classes('w-full justify-end mt-4'):
-                 ui.button('Cancel', on_click=dialog.close).props('flat text-color=white')
-                 async def do_del():
-                     dialog.close()
-                     await controller.request_delete_chat(chat_id)
-                 ui.button('Delete', color='red', on_click=do_del).props('flat')
-        dialog.open()
+    # Persistent Delete Dialog (Robust Pattern)
+    delete_target = {'id': None}
+    
+    with ui.dialog() as delete_dialog, ui.card().classes('bg-slate-900 border border-white/10'):
+        ui.label('Delete this conversation?').classes('text-white font-bold')
+        ui.label('This action cannot be undone.').classes('text-gray-400 text-sm')
+        with ui.row().classes('w-full justify-end mt-4'):
+             ui.button('Cancel', on_click=delete_dialog.close).props('flat text-color=white')
+             
+             async def perform_delete():
+                 cid = delete_target['id']
+                 if cid:
+                     logger.info(f"UI: Deleting chat {cid}")
+                     delete_dialog.close()
+                     await controller.request_delete_chat(cid)
+                     
+             ui.button('Delete', color='red', on_click=perform_delete).props('flat')
+             
+    def open_delete_confirm(chat_id):
+        logger.info(f"UI: Request delete for {chat_id}")
+        delete_target['id'] = chat_id
+        delete_dialog.open()
 
     async def refresh_view():
         """Refreshes the UI state."""
         render_chat_history.refresh()
         chat_scroll.scroll_to(percent=1.0)
+
         
         # Update User Profile
         uname = controller.settings.get('username', 'User')
@@ -336,25 +356,32 @@ def build_ui(controller: Controller):
                 for chat in chats:
                      # Calculate time hint
                      preview = chat.get('preview', 'New Chat')
+                     chat_id = chat['id']
                      
-                     with ui.row().classes('sidebar-btn w-full p-2 mb-1 cursor-pointer items-center gap-3').on('click', lambda c=chat['id']: controller.load_chat_session(c)):
+                     # Async Handler Factories (Closures) to preserve Context
+                     def make_load_handler(cid):
+                         async def _load():
+                             await controller.load_chat_session(cid)
+                         return _load
+
+                     def make_delete_handler(cid):
+                         def _del():
+                             open_delete_confirm(cid)
+                         return _del
+                     
+                     with ui.row().classes('sidebar-btn w-full p-2 mb-1 cursor-pointer items-center gap-3').on('click', make_load_handler(chat_id)):
                         
                         # Active Indicator
-                        is_active = controller.current_chat_id == chat['id']
+                        is_active = controller.current_chat_id == chat_id
                         icon = 'chat_bubble' if is_active else 'chat_bubble_outline'
                         icon_color = 'text-blue-400' if is_active else 'text-gray-600'
-                        bg_cls = 'bg-white/10' if is_active else ''
-                        
-                        # Apply active styling to row
-                        # (NiceGUI rows don't easily accept dynamic classes update without rebuild, 
-                        # but we are rebuilding logic here anyway)
                         
                         ui.icon(icon, size='xs').classes(f'{icon_color}')
                         ui.label(preview).classes(f'text-sm truncate flex-1 { "text-white" if is_active else "text-gray-400" }')
                         
                         with ui.context_menu():
-                            ui.menu_item('Delete', on_click=lambda c=chat['id']: confirm_delete(c)).classes('text-red-400')
-                            
+                            ui.menu_item('Delete', on_click=make_delete_handler(chat_id)).classes('text-red-400')
+            
             if not has_history:
                  ui.label('No history yet').classes('text-xs text-gray-600 p-2 italic')
 

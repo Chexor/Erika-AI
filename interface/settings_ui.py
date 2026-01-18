@@ -104,18 +104,20 @@ SETTINGS_CONFIG = [
                      {
                         "type": "select",
                         "label": "Voice Model",
+                        "change_handler": "set_tts_voice",
+                        "key": "tts_voice",
                         "options": ['alba', 'marius', 'javert', 'jean', 'fantine', 'cosette', 'eponine', 'azelma'],
-                        "default": "azelma",
-                        "change_handler": "set_tts_voice"
+                        "default": "azelma"
                     },
                     {
                         "type": "slider", 
                         "label": "Volume", 
+                        "change_handler": "set_tts_volume",
+                        "key": "tts_volume",
                         "min": 0.0, 
                         "max": 1.0, 
                         "step": 0.1, 
                         "default": 1.0,
-                        "change_handler": "set_tts_volume"
                     },
                     {
                         "type": "toggle",
@@ -173,9 +175,20 @@ def render_color_picker(item):
         for col in item['options']:
             ui.button().classes('w-8 h-8 rounded-full border border-white/20').style(f'background-color: {col}')
 
-def render_slider(item):
+def render_slider(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
-    ui.slider(min=item['min'], max=item['max'], value=item['default']).props('label-always color=blue').classes('w-full max-w-xs')
+    
+    val = item['default']
+    if controller and 'key' in item:
+         val = controller.settings.get(item['key'], val)
+         
+    def on_change(e):
+        if controller and 'change_handler' in item:
+            method = _safe_get_handler(controller, item['change_handler'])
+            if method:
+                method(e.value)
+                
+    ui.slider(min=item['min'], max=item['max'], value=val, step=item.get('step', 1), on_change=on_change).props('label-always color=blue').classes('w-full max-w-xs')
 
 def render_input(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
@@ -244,13 +257,17 @@ def render_select(item, controller=None):
     with ui.column().classes('w-full gap-1'):
         ui.label(item['label']).classes('text-sm text-gray-400')
 
+        val = item['default']
+        if controller and 'key' in item:
+             val = controller.settings.get(item['key'], val)
+
         def on_change(e):
             if controller and 'change_handler' in item:
                 method = _safe_get_handler(controller, item['change_handler'])
                 if method:
                     method(e.value)
 
-        ui.select(options=item['options'], value=item['default'], on_change=on_change).props('outlined dense options-dense behavior=menu input-class=text-white input-style="color: white !important" label-color="gray-4" color="blue-4" popup-content-class="bg-slate-900 text-white"').classes('w-full bg-slate-800/50 rounded-lg text-white')
+        ui.select(options=item['options'], value=val, on_change=on_change).props('outlined dense options-dense behavior=menu input-class=text-white input-style="color: white !important" label-color="gray-4" color="blue-4" popup-content-class="bg-slate-900 text-white"').classes('w-full bg-slate-800/50 rounded-lg text-white')
 
 def render_step_slider(item, controller=None):
     with ui.column().classes('w-full gap-1'):
@@ -308,7 +325,7 @@ def build_settings_modal(controller):
     Builds and returns the Settings Modal dialog using the configuration dictionary.
     """
     with ui.dialog() as settings_dialog:
-        with ui.card().classes('glass-panel h-[700px] p-0 flex flex-row overflow-hidden border border-white/10 rounded-xl').style('width: 1200px; max-width: none'):
+        with ui.card().classes('glass-panel w-full max-w-6xl h-[90vh] p-0 flex flex-row overflow-hidden border border-white/10 rounded-xl'):
             
             # --- LEFT NAV ---
             with ui.column().classes('w-64 h-full bg-black/20 p-6 flex-shrink-0 border-r border-white/5 gap-2'):
@@ -338,7 +355,7 @@ def build_settings_modal(controller):
                                         for item in section['items']:
                                             renderer = ITEM_RENDERERS.get(item['type'])
                                             if renderer:
-                                                if item['type'] in ['step_slider', 'select', 'input', 'textarea']:
+                                                if item['type'] in ['step_slider', 'select', 'input', 'textarea', 'slider']:
                                                     renderer(item, controller)
                                                 else:
                                                     renderer(item)
