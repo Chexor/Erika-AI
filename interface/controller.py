@@ -29,6 +29,32 @@ MAX_INPUT_LENGTH = 50000  # Maximum characters for user input
 LLM_GENERATION_TIMEOUT = 300  # 5 minutes timeout for LLM generation
 CONTEXT_HEADROOM_TOKENS = 512  # Reserve space for completion
 
+# Config Authority Mapping
+# Each setting has exactly ONE authoritative source to prevent contradictions.
+# - 'user': config/user.json (UI & Client Environment)
+# - 'llm': config/llm_config.json (Hardware & Engine Params)
+# - 'soul': erika_home/config/erika_soul.md (Personality Prompt)
+SETTING_AUTHORITIES = {
+    'username': 'user',
+    'accent_color': 'user',
+    'font_size': 'user',
+    'run_on_startup': 'user',
+    'always_on_top': 'user',
+    'tts_voice': 'user',
+    'tts_volume': 'user',
+    'tts_autoplay': 'user',
+    'tts_backend': 'user',
+    'tts_offline_mode': 'user',
+    'tts_update_days': 'user',
+    'theme': 'user',
+    'window_x': 'user',
+    'window_y': 'user',
+    'window_width': 'user',
+    'window_height': 'user',
+    'context_window': 'llm',
+    'persona_prompt': 'soul'
+}
+
 class Controller:
     async def shutdown(self):
         """Graceful shutdown of controller resources."""
@@ -92,53 +118,59 @@ class Controller:
         self.settings = self.load_settings()
 
     def load_settings(self):
-        """Loads settings from disk."""
-        defaults = {
+        """Loads settings from their respective authoritative sources."""
+        settings = {
             'username': 'User',
             'context_window': 8192,
             'tts_voice': 'azelma',
             'tts_volume': 1.0,
             'tts_autoplay': False,
-            'tts_offline_mode': True,
-            'tts_update_days': 7,
-            'accent_color': '#3b82f6'
+            'tts_backend': 'mcp',
+            'accent_color': '#3b82f6',
+            'font_size': 14,
+            'run_on_startup': True,
+            'always_on_top': False
         }
+
+        # 1. Load User Settings (UI/Environment)
         if os.path.exists(self.settings_path):
             try:
                 with open(self.settings_path, 'r') as f:
-                    data = json.load(f)
-                    defaults.update(data)
+                    user_data = json.load(f)
+                    for k, v in user_data.items():
+                        if SETTING_AUTHORITIES.get(k) == 'user':
+                            settings[k] = v
             except Exception as e:
-                logger.error(f"Controller: Failed to load settings: {e}")
-                 
-        # Sync LLM Context from llm_config.json (Master Source)
+                logger.error(f"Controller: Failed to load user settings: {e}")
+
+        # 2. Load LLM Settings (Authority: llm_config.json)
         try:
             ctx_val = self.brain_router.llm_config.get("consciousness_5070ti", {}).get("options", {}).get("num_ctx")
             if ctx_val:
-                defaults['context_window'] = ctx_val
-                logger.info(f"Controller: Context Window synced from llm_config.json: {ctx_val}")
+                settings['context_window'] = ctx_val
         except Exception:
             pass
 
-        # Sync Soul with Settings
+        # 3. Load Soul Settings (Authority: erika_soul.md)
         soul_path = os.path.join("erika_home", "config", "erika_soul.md")
         if os.path.exists(soul_path):
             try:
                 with open(soul_path, 'r', encoding='utf-8') as f:
-                    defaults['persona_prompt'] = f.read()
+                    settings['persona_prompt'] = f.read()
             except Exception:
                 pass
 
-        return defaults
+        return settings
 
     def save_settings(self):
-        """Saves settings to disk."""
+        """Saves only 'user' authorized settings to user.json."""
         try:
+            user_settings = {k: v for k, v in self.settings.items() if SETTING_AUTHORITIES.get(k) == 'user'}
             os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
             with open(self.settings_path, 'w') as f:
-                json.dump(self.settings, f, indent=2)
+                json.dump(user_settings, f, indent=2)
         except Exception as e:
-            logger.error(f"Controller: Failed to save settings: {e}")
+            logger.error(f"Controller: Failed to save user settings: {e}")
         
     async def startup(self):
         """Runs startup checks."""
@@ -323,33 +355,31 @@ class Controller:
         if changed:
             self.save_settings()
 
-    def set_persona_prompt(self, text: str):
-        """Updates the soul prompt and saves directly to MD file."""
-        self.settings['persona_prompt'] = text
-        # Save to user.json for redundancy
-        self.save_settings()
+    def set_persona_prompt(self, prompt: str):
+        """Updates the personality prompt in erika_soul.md (Authority)."""
+        self.settings['persona_prompt'] = prompt # Update in-memory settings
         
-        # Save to Authority File (Soul)
         soul_path = os.path.join("erika_home", "config", "erika_soul.md")
         try:
             os.makedirs(os.path.dirname(soul_path), exist_ok=True)
             with open(soul_path, 'w', encoding='utf-8') as f:
-                f.write(text)
-            logger.info("Controller: Updated erika_soul.md")
+                f.write(prompt)
+            logger.info("Controller: Updated erika_soul.md personality.")
         except Exception as e:
             logger.error(f"Controller: Failed to save erika_soul.md: {e}")
 
     def set_context_window(self, tokens: int):
-        """Updates the context window setting in both user.json and llm_config.json."""
-        self.settings['context_window'] = tokens
-        self.save_settings()
-        
-        # Update LLM Config (Master Source)
+        """Updates the context window in llm_config.json (Authority) and user.json (State)."""
+        self.settings['context_window'] = tokens # Update in-memory settings
+        # No self.save_settings() here, as 'context_window' is not a 'user' authority setting.
+        # Its authority is llm_config.json.
+
+        # Update LLM Config (Authority)
         self.brain_router.set_model_option("consciousness_5070ti", "num_ctx", tokens)
         self.brain_router.set_model_option("subconscious_3060", "num_ctx", tokens)
         self.brain_router.save_config()
         
-        logger.info(f"Controller: Context Window updated to {tokens} tokens in both config files.")
+        logger.info(f"Controller: Context Window authority (llm_config.json) updated to {tokens} tokens.")
 
     def set_tts_voice(self, voice: str):
         """Updates the TTS voice."""

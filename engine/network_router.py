@@ -33,10 +33,9 @@ class BrainRouter:
             "subconscious_3060": {}
         }
 
-        # Check both potential locations for config file
+        # Absolute source of truth for LLM parameters
         possible_paths = [
-            os.path.join("config", "llm_config.json"),
-            os.path.join("erika_home", "config", "llm_config.json")
+            os.path.join("config", "llm_config.json")
         ]
 
         for path in possible_paths:

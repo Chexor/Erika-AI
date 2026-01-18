@@ -168,6 +168,7 @@ SETTINGS_CONFIG = [
                         "label": "Auto-Read Responses",
                         "sub": "Automatically speak responses when generated",
                         "default": False,
+                        "key": "tts_autoplay",
                         "change_handler": "set_tts_autoplay"
                     }
                  ]
@@ -178,14 +179,26 @@ SETTINGS_CONFIG = [
 
 # --- RENDERERS ---
 
-def render_toggle(item):
+def render_toggle(item, controller=None):
     with ui.row().classes('w-full justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5'):
         with ui.column().classes('gap-0'):
             ui.label(item['label']).classes('text-base font-medium text-gray-200')
             if 'sub' in item:
                 ui.label(item['sub']).classes('text-xs text-gray-500')
-        ui.switch(value=item.get('default', False)).props('ignore-theme')\
-            .on('update:model-value', lambda: ui.notify('Setting saved', position='bottom', type='positive', color='black'))
+        
+        # Resolve initial value from controller
+        val = item.get('default', False)
+        if controller and 'key' in item:
+            val = controller.settings.get(item['key'], val)
+
+        def on_change(e):
+            if controller and 'change_handler' in item:
+                method = _safe_get_handler(controller, item['change_handler'])
+                if method:
+                    method(e.value)
+                    ui.notify('Setting saved', position='bottom', type='positive', color='black')
+
+        ui.switch(value=val, on_change=on_change).props('ignore-theme')
 
 def render_color_picker(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
