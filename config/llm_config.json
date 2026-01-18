@@ -1,0 +1,20 @@
+{
+    "consciousness_5070ti": {
+        "model": "qwen3:14b",
+        "options": {
+            "temperature": 0.75,
+            "top_p": 0.9,
+            "repeat_penalty": 1.15,
+            "num_ctx": 8192
+        }
+    },
+    "subconscious_3060": {
+        "model": "gemma2:9b",
+        "options": {
+            "temperature": 0.4,
+            "top_p": 0.8,
+            "repeat_penalty": 1.1,
+            "num_ctx": 16384
+        }
+    }
+}

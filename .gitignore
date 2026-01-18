@@ -27,3 +27,8 @@ tests_temp_*/
 geminiignore.md
 .GEMINIignore
 GEMINI.md
+
+# Agent Artifacts
+.claude/
+Reviews/
+nul
