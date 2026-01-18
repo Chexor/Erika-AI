@@ -200,19 +200,28 @@ class Controller:
 
     def build_system_prompt(self) -> str:
         """Constructs the system prompt with internal memory."""
-        base_persona = (
-            "You are Erika, an intelligent and empathetic AI assistant. "
-            "You are chatting with Tim. "
-            "Your responses should be natural, concise, and engaging."
-        )
         
+        # 1. Load Persona
+        persona_path = os.path.join("erika_home", "config", "persona.md")
+        if os.path.exists(persona_path):
+            with open(persona_path, 'r', encoding='utf-8') as f:
+                base_persona = f.read()
+        else:
+             logger.warning("Controller: Persona file missing. Using fallback.")
+             base_persona = (
+                "You are Erika, an intelligent and empathetic AI assistant. "
+                "You are chatting with Tim. "
+                "Your responses should be natural, concise, and engaging."
+            )
+        
+        # 2. Add Reflection (Internal Memory)
         reflection = self.reflector.get_latest_reflection()
         
         memory_block = ""
         if reflection:
             memory_block = (
                 "\n### INTERNAL MEMORY (DO NOT REPEAT VERBATIM) ###\n"
-                f"LIBRARIAN REFLECTION:\n{reflection}\n"
+                f"LIBRARIAN REFLECTION (Your Subconscious):\n{reflection}\n"
                 "### END MEMORY ###\n"
                 "Use the Internal Memory to inform your tone and first greeting, "
                 "but act naturally, as if you just woke up with these thoughts."
