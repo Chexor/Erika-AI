@@ -25,6 +25,7 @@ def state_sync_loop(window, api_url):
             
             # Simple check for changes
             if current_state != last_state:
+                # print(f"Client: Window moved/resized: {current_state}")
                 try:
                     req = urllib.request.Request(
                         f"{api_url}/api/window/state",
@@ -80,9 +81,11 @@ def main():
         resizable=True
     )
     
+    
     # Start Sync Thread
-    base_url = args.url.rsplit('/', 1)[0] # http://localhost:3333/ -> http://localhost:3333
-    if args.url.endswith('/'): base_url = args.url[:-1]
+    # args.url is like "http://localhost:3333"
+    # We want to ensure we don't trip up on trailing slashes
+    base_url = args.url.rstrip('/')
         
     t = threading.Thread(target=state_sync_loop, args=(window, base_url), daemon=True)
     t.start()

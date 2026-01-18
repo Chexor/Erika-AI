@@ -225,7 +225,8 @@ def main():
     @app.post('/api/window/state')
     async def update_window_state(state: WindowState):
         if controller:
-            controller.update_window_geometry(state.dict())
+            # logger.info(f"API: Received Window State: {state.model_dump()}")
+            controller.update_window_geometry(state.model_dump())
         return {"status": "ok"}
 
     @ui.page('/')
