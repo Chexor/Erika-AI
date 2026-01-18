@@ -44,9 +44,17 @@ Erika operates on **User Logical Time**, not System Time.
 *   **Effect**: Coding sessions at 2 AM count as "Today," ensuring file organization matches the user's psychological day, not the calendar date.
 
 ### 4. Fluid Interaction Layer
+*   **System Status Dashboard**: Real-time monitoring of CPU, RAM, GPU, Context Usage, and Brain Connectivity (accessible via the top-left badge).
+*   **Window Persistence**: The application remembers its last position and size, restoring them effortlessly on next launch.
 *   **Targeted UI Updates**: Bypasses full DOM refreshing during streaming for silky smooth, flash-free text injection.
 *   **Safe TTS**: Fully local speech synthesis (Kokoro-80M) with offline-enforced security (Network blocked for HuggingFace).
 *   **Warm Persona**: Calibrated for supportive, non-robotic companionship (80% Warmth / 20% Banter).
+
+### 5. MCP Architecture (Model Context Protocol)
+Erika uses a centralized `McpManager` to orchestrate external tools.
+*   **Config**: `config/mcp_config.json` defines enabled servers.
+*   **Scalability**: Easily plug in new capabilities (Search, Filesystem, etc.) by adding them to the config.
+*   **Voice Server**: The TTS engine runs as a managed MCP service for process isolation and stability.
 
 ---
 

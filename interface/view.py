@@ -185,7 +185,7 @@ def build_ui(controller: Controller):
         if not controller.chat_history:
             with ui.column().classes('w-full h-full items-center justify-center pb-24 fade-in'):
                 # Big Logo
-                ui.image('/assets/ErikaLogo_v3.png').classes('w-32 h-32 object-contain opacity-90 mb-6 drop-shadow-2xl')
+                ui.image('/assets/ErikaLogo_small.png').classes('w-32 h-32 object-contain opacity-90 mb-6 drop-shadow-2xl')
                 ui.label('How can I help you today?').classes('text-2xl font-light text-gray-400')
             return
 

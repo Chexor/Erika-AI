@@ -3,7 +3,7 @@ import os
 
 def convert():
     base_dir = os.path.dirname(os.path.dirname(__file__))
-    src = os.path.join(base_dir, 'assets', 'ErikaLogo_v3.png')
+    src = os.path.join(base_dir, 'assets', 'ErikaLogo_small.png')
     dst = os.path.join(base_dir, 'assets', 'ErikaLogo.ico')
     
     if not os.path.exists(src):
