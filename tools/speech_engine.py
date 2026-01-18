@@ -1,5 +1,7 @@
 import os
 import time
+import json
+import datetime
 import sounddevice as sd
 import threading
 import logging
@@ -35,15 +37,137 @@ class SpeechEngine:
         self.volume = 1.0
         self._speak_lock = threading.Lock()
 
+        # Enforce offline mode by default, allow periodic update checks
+        self._tts_settings = self._load_tts_settings()
+        self._offline_mode = bool(self._tts_settings.get("tts_offline_mode", True))
+        self._update_days = int(self._tts_settings.get("tts_update_days", 7))
+        self._update_check_path = os.path.join(os.getcwd(), "logs", "tts_update_check.txt")
+        self._update_log_path = os.path.join(os.getcwd(), "logs", "tts_update.log")
+        os.makedirs(os.path.dirname(self._update_check_path), exist_ok=True)
+
         if TTSModel:
             try:
-                logger.info("Loading PocketTTS Model (this may download weights)...")
+                allow_online = self._offline_mode and self._should_allow_update_check()
+                cache_dir = self._get_hf_cache_dir() if allow_online else None
+                start_time = time.time() if allow_online else None
+
+                if self._offline_mode:
+                    self._set_hf_offline(not allow_online)
+
+                logger.info("Loading PocketTTS Model...")
                 self.tts_model = TTSModel.load_model()
                 logger.info("PocketTTS Model loaded successfully.")
+
+                if allow_online and self.tts_model:
+                    updated = self._detect_cache_updates(cache_dir, start_time)
+                    if updated:
+                        self._write_update_log(updated)
+                        logger.info("SpeechEngine: TTS update detected. See tts_update_log.txt for details.")
+                    else:
+                        logger.info("SpeechEngine: No TTS cache updates detected.")
+                    self._write_update_check()
             except (ImportError, RuntimeError, OSError) as e:
                 logger.error(f"Failed to init TTSModel: {e}")
+            finally:
+                if self._offline_mode:
+                    self._set_hf_offline(True)
         else:
             logger.warning("PocketTTS module not found. Audio will be simulated.")
+
+    def _load_tts_settings(self) -> dict:
+        """Loads TTS settings from config/user.json."""
+        settings_path = os.path.join(os.getcwd(), "config", "user.json")
+        try:
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"SpeechEngine: Failed to load settings: {e}")
+        return {}
+
+    def _set_hf_offline(self, offline: bool) -> None:
+        """Controls HF/transformers offline mode."""
+        val = "1" if offline else "0"
+        os.environ["HF_HUB_OFFLINE"] = val
+        os.environ["TRANSFORMERS_OFFLINE"] = val
+
+    def _should_allow_update_check(self) -> bool:
+        """Returns True if the periodic online check is due."""
+        if not self._offline_mode or self._update_days <= 0:
+            return False
+        if not os.path.exists(self._update_check_path):
+            return True
+        try:
+            with open(self._update_check_path, 'r', encoding='utf-8') as f:
+                raw = f.read().strip()
+            if not raw:
+                return True
+            last = datetime.datetime.fromisoformat(raw)
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=datetime.timezone.utc)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            return (now - last) >= datetime.timedelta(days=self._update_days)
+        except Exception:
+            return True
+
+    def _write_update_check(self) -> None:
+        """Updates the last successful online check timestamp."""
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            with open(self._update_check_path, 'w', encoding='utf-8') as f:
+                f.write(now)
+        except Exception as e:
+            logger.debug(f"SpeechEngine: Failed to write update check: {e}")
+
+    def _get_hf_cache_dir(self) -> str:
+        """Returns the HuggingFace cache directory, if available."""
+        env_cache = os.environ.get("HUGGINGFACE_HUB_CACHE") or os.environ.get("HF_HUB_CACHE")
+        if env_cache:
+            return env_cache
+        hf_home = os.environ.get("HF_HOME")
+        if hf_home:
+            return os.path.join(hf_home, "hub")
+        return os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+
+    def _detect_cache_updates(self, cache_dir: Optional[str], start_time: Optional[float]) -> list:
+        """Returns a list of updated cache files since start_time."""
+        if not cache_dir or start_time is None:
+            return []
+        if not os.path.exists(cache_dir):
+            return []
+
+        updates = []
+        try:
+            for root, _, files in os.walk(cache_dir):
+                for name in files:
+                    path = os.path.join(root, name)
+                    try:
+                        mtime = os.path.getmtime(path)
+                        if mtime >= start_time:
+                            rel = os.path.relpath(path, cache_dir)
+                            size = os.path.getsize(path)
+                            updates.append((rel, size))
+                    except OSError:
+                        continue
+        except OSError:
+            return []
+
+        return updates
+
+    def _write_update_log(self, updates: list) -> None:
+        """Writes update details to the log file."""
+        try:
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            lines = [f"[{timestamp}] TTS cache updates detected:"]
+            for rel, size in updates[:50]:
+                lines.append(f"- {rel} ({size} bytes)")
+            if len(updates) > 50:
+                lines.append(f"... truncated, total files: {len(updates)}")
+            lines.append("")
+            with open(self._update_log_path, 'a', encoding='utf-8') as f:
+                f.write("\n".join(lines))
+        except Exception as e:
+            logger.debug(f"SpeechEngine: Failed to write update log: {e}")
 
     def _cleanup_temp_files(self):
         """Removes old temporary files to prevent accumulation."""

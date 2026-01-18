@@ -62,7 +62,9 @@ class Controller:
             'context_window': 8192,
             'tts_voice': 'azelma',
             'tts_volume': 1.0,
-            'tts_autoplay': False
+            'tts_autoplay': False,
+            'tts_offline_mode': True,
+            'tts_update_days': 7
         }
         if os.path.exists(self.settings_path):
             try:
