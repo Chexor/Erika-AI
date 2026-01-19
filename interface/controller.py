@@ -510,14 +510,55 @@ class Controller:
         logger.info(f"Controller: Playing voice test for {voice}")
 
     def _sanitize_for_tts(self, text: str) -> str:
-        """Removes emojis and roleplay actions for TTS safety only."""
+        """Removes emojis and meta-text but preserves emphasis and rhythm for TTS."""
         if not text: return ""
-        # Strip *actions* and (parentheticals)
-        clean = re.sub(r'\*.*?\*', '', text)
-        clean = re.sub(r'\(.*?\)', '', clean)
-        # Remove emojis (Keep alphanumeric + basic punctuation)
-        clean = re.sub(r'[^\w\s,.\'?!"-]', '', clean)
+        
+        # 1. Normalize unicode punctuation and force pauses for rhythm
+        text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
+        
+        # Contemplation marker "--" at the end of thoughts
+        text = text.replace('--', '... ')
+        
+        # Force a pause for ellipses by adding a comma (single pass to avoid double-replacement)
+        text = re.sub(r'\.{3,}|…', ', ... ', text)
+        
+        # Ensure dashes have space to prevent word merging and add a slight pause
+        text = text.replace('—', ' - ').replace('–', ' - ')
+        
+        # 2. Strip (parentheticals) - often meta-commentary like (laughing)
+        clean = re.sub(r'\(.*?\)', '', text)
+        
+        # 3. Remove literal markdown symbols used for emphasis (* and _)
+        clean = clean.replace('*', '').replace('_', '')
+        
+        # 4. Remove emojis and truly "illegal" symbols (Keep alphanumeric + basic punctuation)
+        # Whitelist includes standard punctuation that assists TTS engines
+        clean = re.sub(r'[^\w\s,.\'?!:;"-]', '', clean)
+        
+        # 5. Collapse multiple spaces but stay mindful of the space we just added for pauses
+        clean = re.sub(r'\s+', ' ', clean)
+        
         return clean.strip()
+
+    def _get_sentiment_params(self, text: str) -> dict:
+        """Determines TTS parameters based on text sentiment."""
+        text_lower = text.lower()
+        
+        # 1. High Energy / Excited / Playful
+        if any(w in text_lower for w in ["!", "love", "awesome", "hell yes", "excited", "wow", "damn", "shit", "heh"]):
+            return {"temperature": 1.2, "decode_steps": 1}
+            
+        # 2. Serious / Cold / Authoritative
+        if any(w in text_lower for w in ["must", "required", "warning", "error", "critical", "stop", "illegal"]):
+            return {"temperature": 0.4, "decode_steps": 4}
+            
+        # 3. Tired / Soft / Contemplative
+        if any(w in text_lower for w in ["hmm", "ugh", "sigh", "maybe", "...", "long day", "don't know", "oh"]):
+            return {"temperature": 0.6, "decode_steps": 8}
+            
+        # 4. Default / Neutral
+        return {"temperature": self.settings.get('tts_temperature', 0.7), 
+                "decode_steps": self.settings.get('tts_decode_steps', 1)}
 
     async def toggle_tts(self, msg_id: str, text: str):
         """Toggles TTS for a specific message."""
@@ -531,6 +572,11 @@ class Controller:
         else:
             if self.speaking_msg_id:
                 self.speech_engine.stop()
+            
+            # Map sentiment to TTS parameters
+            sentiment = self._get_sentiment_params(text)
+            self.speech_engine.set_temperature(sentiment["temperature"])
+            self.speech_engine.set_decode_steps(sentiment["decode_steps"])
             
             clean_text = self._sanitize_for_tts(text)
             self.speaking_msg_id = msg_id
