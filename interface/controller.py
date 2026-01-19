@@ -195,9 +195,11 @@ class Controller:
         """Saves only 'user' authorized settings to user.json."""
         try:
             user_settings = {k: v for k, v in self.settings.items() if SETTING_AUTHORITIES.get(k) == 'user'}
+            logger.info(f"Controller: Saving settings to disk: tts_autoplay={user_settings.get('tts_autoplay')}")
             os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
             with open(self.settings_path, 'w') as f:
                 json.dump(user_settings, f, indent=2)
+            logger.info("Controller: Settings saved successfully.")
         except Exception as e:
             logger.error(f"Controller: Failed to save user settings: {e}")
         
@@ -498,9 +500,11 @@ class Controller:
 
     def set_tts_autoplay(self, enabled: bool):
         """Updates TTS Autoplay setting."""
+        # Force boolean type in case UI sends string
+        enabled = bool(enabled)
         self.settings['tts_autoplay'] = enabled
         self.save_settings()
-        logger.info(f"Controller: TTS Autoplay set to {enabled}")
+        logger.info(f"Controller: TTS Autoplay set to {enabled} (Type: {type(enabled)})")
 
     def test_voice(self):
         """Speaks a test sentence using current voice settings."""
@@ -997,7 +1001,10 @@ class Controller:
         self._persist()
         
         # Auto-read
-        if self.settings.get('tts_autoplay'):
+        should_autoplay = self.settings.get('tts_autoplay', False)
+        logger.info(f"Controller: Checking Auto-Read. Enabled={should_autoplay}")
+        if should_autoplay:
+                logger.info("Controller: Triggering Auto-Read...")
                 await self.toggle_tts(assistant_msg['id'], assistant_msg['content'])
         
         # Log Completion Tokens

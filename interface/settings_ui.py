@@ -130,7 +130,7 @@ SETTINGS_CONFIG = [
                 "items": [
                     {
                         "type": "model_info",
-                        "model_name": "Erika-beta-14b (Qwen)"
+                        "model_name": "Erika Core 12b (Custom)"
                     },
                      {
                         "type": "step_slider",
@@ -151,29 +151,29 @@ SETTINGS_CONFIG = [
                         "min": 0.1,
                         "max": 1.5,
                         "step": 0.05,
-                        "default": 0.7,
+                        "default": 1.0,
                         "key": "sys_temperature",
                         "change_handler": "set_sys_temperature"
                     },
                     {
                         "type": "slider",
                         "label": "Focus (Top P)",
-                        "sub": "Lower = More focused on probable words.",
+                        "sub": "Lower = More focused. Recommended: 0.95 for Gemma 3.",
                         "min": 0.1,
                         "max": 1.0,
                         "step": 0.05,
-                        "default": 0.9,
+                        "default": 0.95,
                         "key": "sys_top_p",
                         "change_handler": "set_sys_top_p"
                     },
                     {
                         "type": "slider",
                         "label": "Repetition Penalty",
-                        "sub": "Higher = Less likely to repeat text.",
+                        "sub": "Higher = Less likely to repeat text. Recommended: 1.0",
                         "min": 1.0,
-                        "max": 2.0,
-                        "step": 0.05,
-                        "default": 1.1,
+                        "max": 1.5,
+                        "step": 0.01,
+                        "default": 1.0,
                         "key": "sys_repeat_penalty",
                         "change_handler": "set_sys_repeat_penalty"
                     }
@@ -336,19 +336,25 @@ def render_toggle(item, controller=None):
             if 'sub' in item:
                 ui.label(item['sub']).classes('text-xs text-gray-500')
         
-        # Resolve initial value from controller
-        val = item.get('default', False)
+        # Bind directly to the settings dictionary for 2-way sync
         if controller and 'key' in item:
-            val = controller.settings.get(item['key'], val)
+            # We still need the change handler to trigger side effects (saves/callbacks)
+            # bind_value updates the dict, but doesn't call our setter method automatically unless we keep on_change.
+            # Actually, bind_value handles the value. on_change handles the side effect.
+            
+            def on_change(e):
+                if controller and 'change_handler' in item:
+                    method = _safe_get_handler(controller, item['change_handler'])
+                    if method:
+                        method(e.value)
+                        ui.notify('Setting saved', position='bottom', type='positive', color='black')
 
-        def on_change(e):
-            if controller and 'change_handler' in item:
-                method = _safe_get_handler(controller, item['change_handler'])
-                if method:
-                    method(e.value)
-                    ui.notify('Setting saved', position='bottom', type='positive', color='black')
-
-        ui.switch(value=val, on_change=on_change).props('ignore-theme')
+            # Use bind_value to ensure UI always matches state (even on re-open)
+            ui.switch(on_change=on_change).bind_value(controller.settings, item['key']).props('ignore-theme')
+        else:
+            # Fallback for non-bound toggles
+            val = item.get('default', False)
+            ui.switch(value=val).props('ignore-theme')
 
 def render_color_picker(item, controller=None):
     ui.label(item['label']).classes('text-sm text-gray-400')
