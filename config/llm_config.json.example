@@ -1,6 +1,6 @@
 {
-    "consciousness_primary": {
-        "model": "qwen2.5:14b",
+    "primary_reasoning_agent": {
+        "model": "<MODEL_NAME>:<TAG>",
         "options": {
             "temperature": 0.8,
             "top_p": 0.7,
@@ -8,8 +8,8 @@
             "num_ctx": 8192
         }
     },
-    "subconscious_library": {
-        "model": "gemma2:9b",
+    "secondary_memory_agent": {
+        "model": "<MODEL_NAME>:<TAG>",
         "options": {
             "temperature": 0.3,
             "top_p": 0.9,

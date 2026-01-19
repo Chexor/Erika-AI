@@ -6,7 +6,7 @@
   "tts_backend": "mcp",
   "accent_color": "#3b82f6",
   "font_size": 14,
-  "run_on_startup": true,
+  "run_on_startup": false,
   "always_on_top": false,
   "tts_temperature": 0.7,
   "tts_decode_steps": 1,
@@ -14,8 +14,8 @@
   "tts_offline_mode": true,
   "tts_update_days": 7,
   "theme": "dark",
-  "window_x": 100,
-  "window_y": 100,
+  "window_x": 0,
+  "window_y": 0,
   "window_width": 1280,
   "window_height": 800
 }
