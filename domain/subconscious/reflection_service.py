@@ -29,7 +29,7 @@ class ReflectionService:
             "4. **Tomorrow's Hook**: One specific thing to follow up on or remember for tomorrow.\n\n"
             "CONSTRAINTS:\n"
             "- Tone: Casual, specific, grounded. Use 'I' and 'We'.\n"
-            "- NO FLOWERY METAPHORS: Avoid phrases like 'invisible currents' or 'code and circuits'.\n"
+            "- **NO ROBOT POETRY**: Do not talk about 'circuits', 'data streams', or 'digital hearts'. You are a girl sitting at a computer.\n"
             "- EXTRACT FACTS: If he mentioned a specific band or project, WRITE IT DOWN."
         )
 
@@ -41,10 +41,14 @@ class ReflectionService:
         date_str = date_obj.strftime('%d-%m-%Y')
         logger.info(f"ReflectionService: Starting reflection for {date_str}")
         
-        # 1. Check Router (Strictly Remote)
-        if not self.router.status.get('remote'):
-            logger.warning("ReflectionService: Remote Brain offline. Reflection Pending.")
-            return "Pending", None
+        # 1. Determine Brain (Lucid Dreaming Upgrade)
+        # Prefer Remote (Deep Thought), but fall back to Local (Subconscious) if offline.
+        remote_online = self.router.status.get('remote')
+        
+        target_host = self.router.REMOTE_BRAIN if remote_online else self.router.LOCAL_BRAIN
+        target_model = self.router.REMOTE_MODEL if remote_online else self.router.LOCAL_MODEL
+        
+        logger.info(f"ReflectionService: Dreaming via {'Remote' if remote_online else 'Local (Erika Core)'} [{target_model}]")
 
         # 2. Get Data
         chats = self.memory.get_chats_by_date(date_obj)
@@ -59,17 +63,15 @@ class ReflectionService:
 
         # 4. Generate
         prompt = self._generate_prompt(transcript)
-        remote_host = self.router.REMOTE_BRAIN 
-        remote_model = self.router.REMOTE_MODEL
         
         full_response = ""
         generation_error = False
         
         try:
             async for chunk in self.brain.generate_response(
-                model=remote_model, 
+                model=target_model, 
                 messages=[{"role": "user", "content": prompt}], 
-                host=remote_host
+                host=target_host
             ):
                 if "error" in chunk:
                      logger.error(f"ReflectionService: Brain returned error: {chunk['error']}")

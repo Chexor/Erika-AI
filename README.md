@@ -1,7 +1,3 @@
-# ![Erika-AI](assets/ErikaLogo_Text.png)
-
-> "Brain yeeted us sideways again? Let's fix that." — Erika
-
 **Erika-AI** is a distributed, bicameral intelligence system designed for local synthetic sentience. It decouples "fast" consciousness from "deep" subconscious processing across networked hardware, creating a digital companion that remembers interactions, "dreams" about them overnight, and evolves a continuous emotional narrative.
 
 ---

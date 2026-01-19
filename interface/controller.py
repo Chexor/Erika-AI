@@ -529,8 +529,9 @@ class Controller:
         # Ensure dashes have space to prevent word merging and add a slight pause
         text = text.replace('—', ' - ').replace('–', ' - ')
         
-        # 2. Strip (parentheticals) - often meta-commentary like (laughing)
-        clean = re.sub(r'\(.*?\)', '', text)
+        # 2. Strip (parentheticals) - often meta-commentary like (laughing) or multi-line thoughts
+        clean = re.sub(r'\(.*?\)', '', text, flags=re.DOTALL)
+        clean = re.sub(r'\[.*?\]', '', clean, flags=re.DOTALL) # Also strip [actions]
         
         # 3. Remove literal markdown symbols used for emphasis (* and _)
         clean = clean.replace('*', '').replace('_', '')
@@ -542,7 +543,15 @@ class Controller:
         # 5. Collapse multiple spaces but stay mindful of the space we just added for pauses
         clean = re.sub(r'\s+', ' ', clean)
         
-        return clean.strip()
+        clean = clean.strip()
+        
+        # Add a leading pause/period to prevent the TTS engine from cutting off the first word.
+        # This is critical for short bolded starts like "**Hmm.**" or("**Heh**") which Erika uses often.
+        if clean:
+            clean = ". " + clean
+
+        logger.info(f"Controller: Sanitized TTS Text: '{clean}'")
+        return clean
 
     def _get_sentiment_params(self, text: str) -> dict:
         """Determines TTS parameters based on text sentiment."""

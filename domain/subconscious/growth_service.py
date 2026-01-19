@@ -20,11 +20,12 @@ class GrowthService:
         """
         logger.info("GrowthService: Initiating personality evolution...")
         
-        # 1. Check Offline Status (Safety)
-        # We strictly use the Remote Brain for subconscious tasks to avoid blocking the main brain.
-        if not self.router.status.get('remote'):
-             logger.warning("GrowthService: Remote Brain offline. Skipping evolution.")
-             return
+        # 1. Determine Brain (Lucid Dreaming Upgrade)
+        remote_online = self.router.status.get('remote')
+        target_host = self.router.REMOTE_BRAIN if remote_online else self.router.LOCAL_BRAIN
+        target_model = self.router.REMOTE_MODEL if remote_online else self.router.LOCAL_MODEL
+
+        logger.info(f"GrowthService: Evolving via {'Remote' if remote_online else 'Local (Erika Core)'} [{target_model}]")
 
         # 2. Load Current State
         current_growth = ""
@@ -53,16 +54,13 @@ class GrowthService:
         )
 
         # 4. Generate
-        remote_host = self.router.REMOTE_BRAIN 
-        remote_model = self.router.REMOTE_MODEL
-        
         new_growth = ""
         try:
             logger.info("GrowthService: Dreaming of new traits...")
             async for chunk in self.brain.generate_response(
-                model=remote_model, 
+                model=target_model, 
                 messages=[{"role": "user", "content": prompt}], 
-                host=remote_host
+                host=target_host
             ):
                 if "message" in chunk:
                     new_growth += chunk['message'].get('content', '')
