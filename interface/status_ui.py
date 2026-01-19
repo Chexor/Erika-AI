@@ -45,7 +45,10 @@ class StatusDashboard:
                 with ui.card().classes('bg-white/5 border border-white/5 p-4 gap-2'):
                     ui.label('Active Conversation').classes('text-xs font-bold text-gray-400 uppercase tracking-wider')
                     self.ctx_label = ui.label('Context: -- / --').classes('text-sm text-gray-300 font-mono')
-                    self.ctx_bar = ui.linear_progress(0).props('color=blue track-color=grey-8').classes('h-2 rounded-full mt-2')
+                    
+                    # Custom CSS Progress Bar to avoid unwanted text
+                    with ui.element('div').classes('w-full h-2 bg-gray-800 rounded-full mt-2 overflow-hidden'):
+                         self.ctx_bar_inner = ui.element('div').classes('h-full bg-blue-500 transition-all duration-300').style('width: 0%')
                 
                 # 3. Brain Status
                 with ui.card().classes('bg-white/5 border border-white/5 p-4 gap-2'):
@@ -80,7 +83,7 @@ class StatusDashboard:
             maxx = stats.get('tokens_max', 8192)
             pct = curr / maxx if maxx > 0 else 0
             self.ctx_label.set_text(f"Context: {curr} / {maxx} ({pct*100:.1f}%)")
-            self.ctx_bar.set_value(pct)
+            self.ctx_bar_inner.style(f'width: {pct*100}%')
             
             # 3. Brain
             l_stat = "Online" if stats['brain']['local'] else "Offline"
