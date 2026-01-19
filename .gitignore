@@ -29,6 +29,7 @@ crash_debug.txt
 .idea/
 
 # Documentation / Agent
+.agent/
 geminiignore.md
 .GEMINIignore
 GEMINI.md
