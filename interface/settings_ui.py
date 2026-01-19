@@ -607,7 +607,7 @@ def build_settings_modal(controller):
                                         for item in section['items']:
                                             renderer = ITEM_RENDERERS.get(item['type'])
                                             if renderer:
-                                                if item['type'] in ['step_slider', 'select', 'input', 'textarea', 'slider', 'color_picker']:
+                                                if item['type'] in ['toggle', 'step_slider', 'select', 'input', 'textarea', 'slider', 'color_picker']:
                                                     renderer(item, controller)
                                                 else:
                                                     renderer(item)
