@@ -15,7 +15,10 @@ logs/
 chats/
 reflections/
 chat_archive/
-config/user.json
+config/*.json
+!config/*.json.example
+erika_home/config/*.md
+!erika_home/config/*.md.example
 _legacy_backup/
 tests_temp_*/
 test_logs/

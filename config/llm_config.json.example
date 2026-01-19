@@ -1,0 +1,20 @@
+{
+    "consciousness_primary": {
+        "model": "qwen2.5:14b",
+        "options": {
+            "temperature": 0.8,
+            "top_p": 0.7,
+            "repeat_penalty": 1.1,
+            "num_ctx": 8192
+        }
+    },
+    "subconscious_library": {
+        "model": "gemma2:9b",
+        "options": {
+            "temperature": 0.3,
+            "top_p": 0.9,
+            "repeat_penalty": 1.2,
+            "num_ctx": 16384
+        }
+    }
+}
